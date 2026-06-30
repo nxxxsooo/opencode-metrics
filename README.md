@@ -1,150 +1,140 @@
+<div align="center">
+
 # opencode-metrics
 
-[![npm version](https://img.shields.io/npm/v/opencode-metrics)](https://www.npmjs.com/package/opencode-metrics)
-[![license](https://img.shields.io/npm/l/opencode-metrics)](./LICENSE)
-[![OpenCode TUI plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-5b9dd9)](https://opencode.ai)
+**Per-session sidebar metrics for the [OpenCode](https://opencode.ai) TUI.**
 
-A per-session sidebar metrics plugin for the OpenCode TUI.
+Speed · TTFT · tokens · cache · timing — for the session you are actually attached to, not a global total.
 
-`opencode-metrics` tracks OpenCode request metrics **per session** and renders the active session inside the `sidebar_content` slot. It is built for `opencode serve` / multi-session usage, where a single global footer-style status line can show the wrong session's numbers.
+[![npm version](https://img.shields.io/npm/v/opencode-metrics?color=58e6c4&label=npm)](https://www.npmjs.com/package/opencode-metrics)
+[![license](https://img.shields.io/npm/l/opencode-metrics?color=5ab8ff)](./LICENSE)
+[![OpenCode TUI plugin](https://img.shields.io/badge/OpenCode-TUI%20plugin-fbbf77)](https://opencode.ai)
 
-## What It Shows
+English · [简体中文](./README_CN.md)
 
-During and after a request, for the **current** session:
+<br/>
 
-- **Speed** — tokens per second
-- **Elapsed** — request run time (freezes when the request completes)
-- **TTFT** — time to first token
-- **Tokens** — input and output token counts on one line (`↓ in  ↑ out`)
-- **Cache** — cache-read tokens (when exact token counts are available)
-- **Session** — whole-session run time (keeps ticking across requests)
+<img src="https://raw.githubusercontent.com/nxxxsooo/opencode-metrics/main/assets/sidebar.png" alt="opencode-metrics sidebar panel in the OpenCode TUI" width="560">
 
-Header status reflects request state: `idle`, `waiting`, `streaming`, or `complete`.
+</div>
 
-## Collapsed vs Expanded
-
-Click the header badge to toggle:
-
-- **▼ Expanded** — full breakdown: Speed, Elapsed, TTFT, Tokens, Cache, Session.
-- **▶ Collapsed** — compact glance: Speed + Session only (or just the header when idle). Session (whole-session time) is shown rather than the per-request Elapsed.
-
-## Idle Behavior
-
-When a request completes, the last request's metrics **stay visible** until the next request starts (Speed and Elapsed freeze at completion time; Session keeps counting). This is controlled by `holdDurationMs` (default `0` = keep until next request). Set a positive value (>= 1000ms) to auto-clear the completed metrics after that delay.
-
-## Why Sidebar
-
-A global footer bar keeps one request view. In serve mode, multiple attached sessions can be active at once, so a global bar can show aggregate or wrong-session data. This plugin stores metrics by `sessionID` and the sidebar reads the active `session_id` supplied by OpenCode's `sidebar_content` slot.
-
-## TUI Preferences
-
-`opencode-metrics` uses the shared `tui-preferences.jsonc` file (same convention as Magic Context and other sidebar plugins) for sidebar position, section collapse, and per-row visibility.
-
-### File Location
-
-```text
-~/.config/opencode/tui-preferences.jsonc
-```
-
-Override with `OPENCODE_TUI_PREFERENCES_FILE`, `OPENCODE_CONFIG_DIR`, or `XDG_CONFIG_HOME`.
-
-### Configuration
-
-```jsonc
-{
-  "opencode-metrics": {
-    // Slot ordering. Default: 160. OpenCode built-ins occupy 100-500.
-    "order": 160,
-    // When true, sort to the top of the sidebar (below the forced band).
-    "forceToTop": false,
-    // Whole-section visibility and collapse.
-    "section": {
-      "enabled": true,       // false = render nothing
-      "collapsed": null,     // null | boolean; persisted when rememberCollapsed is true
-      "rememberCollapsed": true,
-      "label": "Metrics"     // header badge text (max 24 chars)
-    },
-    // Per-row visibility (additive with opencode-bar.json `visible`).
-    // A row shows only if BOTH this and the runtime config say true.
-    "rows": {
-      "speed": true,
-      "ttft": true,
-      "input": true,
-      "output": true,
-      "cache": true,
-      "elapsed": true,
-      "session": true,
-      "model": true
-    }
-  }
-}
-```
-
-### Init Script
-
-Write missing defaults into the prefs file (safe to run repeatedly — preserves existing values and sibling plugin keys):
-
-```bash
-bun run init:prefs
-# or with a custom path:
-OPENCODE_TUI_PREFERENCES_FILE=/custom/path.jsonc bun run init:prefs
-```
-
-### Click to Collapse
-
-Click the header badge to toggle collapse. When `rememberCollapsed` is true, the state persists to `tui-preferences.jsonc` (comment-preserving, atomic write).
-
-## Runtime Config (opencode-bar.json)
-
-The runtime metrics config is read from:
-
-```text
-~/.config/opencode/opencode-bar.json
-```
-
-This file controls `refreshIntervalMs`, `holdDurationMs`, `estimationRatio`, `enableLogging`, and the `visible` map for each metric row. It remains the runtime metrics configuration — `tui-preferences.jsonc` handles sidebar presentation only.
+<br/>
 
 ## Install
 
-Add the plugin to your OpenCode TUI plugin list:
+Add it to your OpenCode TUI plugin list and restart:
 
 ```jsonc
+// ~/.config/opencode/tui.jsonc
 {
   "plugin": ["opencode-metrics"]
 }
 ```
 
-## Local Development
+That's it. The Metrics section appears in the sidebar.
 
-Use the source entry while developing (point at your local checkout):
+## Why a sidebar, not a footer bar
+
+A global footer-style status line keeps **one** request view. Under `opencode serve`, several attached sessions run at once — so a global bar shows aggregate or wrong-session numbers.
+
+`opencode-metrics` stores every request keyed by `sessionID` and renders only the active `session_id` that OpenCode passes to its `sidebar_content` slot. **You always see your own session.**
+
+## What it shows
+
+For the **current** session, during and after a request:
+
+| Row | Meaning |
+|-----|---------|
+| **Speed** | tokens per second (`⚡`) |
+| **Elapsed** | per-request run time, freezes on completion (`▹`) |
+| **TTFT** | time to first token (`⏱`) |
+| **Tokens** | input + output on one line — `↓ in  ↑ out` |
+| **Cache** | cache-read tokens, when exact counts arrive (`○`) |
+| **Session** | whole-session run time, keeps ticking (`◷`) |
+
+The header badge shows request state: `idle` · `waiting` · `streaming` · `complete`.
+
+## Collapsed vs expanded
+
+Click the header badge to toggle:
+
+- **▼ Expanded** — full breakdown: Speed, Elapsed, TTFT, Tokens, Cache, Session.
+- **▶ Collapsed** — compact glance: **Speed + Session** only (or just the header when idle).
+
+When a request finishes, the last numbers **stay visible** until the next request — Speed and Elapsed freeze at completion, Session keeps counting.
+
+## Configuration
+
+Presentation preferences live in the shared `tui-preferences.jsonc` (same file Magic Context and other sidebar plugins use — each plugin owns one top-level key):
+
+```jsonc
+// ~/.config/opencode/tui-preferences.jsonc
+{
+  "opencode-metrics": {
+    "order": 160,          // sidebar position (OpenCode built-ins occupy 100-500)
+    "forceToTop": false,   // sort above the normal band
+    "section": {
+      "enabled": true,
+      "collapsed": null,   // null | true | false; persisted when rememberCollapsed
+      "rememberCollapsed": true,
+      "label": "Metrics"
+    },
+    "rows": {
+      "speed": true, "ttft": true, "input": true, "output": true,
+      "cache": true, "elapsed": true, "session": true
+    }
+  }
+}
+```
+
+Seed the defaults safely (preserves existing values and sibling plugin keys):
+
+```bash
+bun run init:prefs
+```
+
+Runtime behavior (`refreshIntervalMs`, `holdDurationMs`, `estimationRatio`, `enableLogging`, and the `visible` map) is read from `~/.config/opencode/opencode-bar.json`. A row shows only when **both** files agree it is visible. `holdDurationMs` defaults to `0` — completed metrics persist until the next request; set `>= 1000` to auto-clear after that many ms.
+
+## For AI agents / OpenCode
+
+If you are an AI coding agent installing this for a user, the full procedure is:
+
+```text
+GOAL: install opencode-metrics into the user's OpenCode TUI.
+
+1. Open ~/.config/opencode/tui.jsonc (create it if missing).
+2. Ensure the "plugin" array contains the string "opencode-metrics".
+   If the array does not exist, add: { "plugin": ["opencode-metrics"] }
+   Keep any existing entries (e.g. magic-context, oh-my-openagent).
+3. Do NOT add a version suffix; "opencode-metrics" resolves latest.
+4. Tell the user to open a NEW TUI window/attach — plugins load at startup,
+   they are not hot-reloaded.
+
+VERIFY: a "Metrics" section appears in the TUI sidebar. Click its header
+badge to confirm it collapses/expands.
+
+OPTIONAL: write ~/.config/opencode/tui-preferences.jsonc with an
+"opencode-metrics" key (order/rows/section) — see Configuration above.
+Never overwrite sibling top-level keys; only touch "opencode-metrics".
+
+NOTES:
+- It is a TUI plugin (package.json: "oc-plugin": ["tui"]); it only renders
+  inside the OpenCode TUI, not in headless/CI runs.
+- It is per-session by design: under `opencode serve` each attached session
+  shows its own metrics, never a global sum.
+```
+
+## Local development
+
+Point the plugin entry at a local checkout instead of the package:
 
 ```jsonc
 {
-  "plugin": [
-    "file:///absolute/path/to/opencode-metrics/src/tui.tsx"
-  ]
+  "plugin": ["file:///absolute/path/to/opencode-metrics/src/tui.tsx"]
 }
 ```
 
-## Package Shape
-
-The package exposes a TUI plugin entry:
-
-```json
-{
-  "exports": {
-    "./tui": {
-      "import": "./src/tui.tsx",
-      "types": "./dist/tui.d.ts"
-    }
-  },
-  "oc-plugin": ["tui"]
-}
-```
-
-The source entry is used because `@opentui/solid@0.3.4` transforms TSX through its Bun preload/runtime support (its JSX runtime ships type declarations only, no runtime JS). The build step is retained for static checks and type generation, but the plugin export points at source like Magic Context.
-
-## Checks
+Checks:
 
 ```bash
 bun test
@@ -153,9 +143,11 @@ bun run build
 npm pack --dry-run
 ```
 
+The `./tui` export points at `src/tui.tsx` (not `dist`) because `@opentui/solid@0.3.4` ships a type-only JSX runtime; OpenCode loads the TSX through its Bun preload, the same pattern Magic Context uses.
+
 ## Credits
 
-`opencode-metrics` began as a rewrite of [Icicno/opencodeBar](https://github.com/Icicno/opencodeBar), an OpenCode TUI status-bar plugin. It was reworked into a per-session sidebar plugin. Thanks to the upstream author for the original concept.
+`opencode-metrics` is a rewrite of [Icicno/opencodeBar](https://github.com/Icicno/opencodeBar), an OpenCode TUI status-bar plugin, reworked into a per-session sidebar plugin. Thanks to the upstream author for the original concept.
 
 ## License
 

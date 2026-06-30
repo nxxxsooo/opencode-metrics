@@ -31,7 +31,8 @@
     "src/components/SidebarMetrics.tsx",
     "src/components/StatRow.tsx",
     "src/scripts/init-tui-preferences.ts",
-    "README.md"
+    "README.md",
+    "README_CN.md"
   ],
   "scripts": {
     "build": "tsup",
