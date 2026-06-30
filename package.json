@@ -1,0 +1,58 @@
+{
+  "name": "opencode-metrics",
+  "version": "0.2.0",
+  "description": "OpenCode TUI sidebar plugin for real-time LLM token metrics",
+  "type": "module",
+  "main": "./src/tui.tsx",
+  "types": "./dist/tui.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/tui.tsx",
+      "types": "./dist/tui.d.ts"
+    },
+    "./tui": {
+      "import": "./src/tui.tsx",
+      "types": "./dist/tui.d.ts"
+    }
+  },
+  "oc-plugin": [
+    "tui"
+  ],
+  "files": [
+    "dist/tui.d.ts",
+    "src/tui.tsx",
+    "src/tui-preferences.ts",
+    "src/badge-contrast.ts",
+    "src/collector.ts",
+    "src/config.ts",
+    "src/logger.ts",
+    "src/metrics.ts",
+    "src/types.ts",
+    "src/components/SidebarMetrics.tsx",
+    "src/components/StatRow.tsx",
+    "src/scripts/init-tui-preferences.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "bun test",
+    "init:prefs": "OPENCODE_TUI_PREFERENCES_FILE=${OPENCODE_TUI_PREFERENCES_FILE:-$HOME/.config/opencode/tui-preferences.jsonc} bun run src/scripts/init-tui-preferences.ts",
+    "prepublishOnly": "tsup"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@opentui/core": "0.3.4",
+    "@opentui/solid": "0.3.4",
+    "comment-json": "^5.0.0",
+    "solid-js": "^1.9.12"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*",
+    "@opencode-ai/sdk": "*"
+  }
+}

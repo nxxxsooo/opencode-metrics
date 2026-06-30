@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install
+      - run: bun test
+      - run: bun run build
+
+      # Publishes only when an NPM_TOKEN secret is configured. Without it the
+      # job still runs build + test (green), and publishing is done locally.
+      - uses: JS-DevTools/npm-publish@v3
+        if: ${{ env.NPM_TOKEN != '' }}
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
+          access: public
