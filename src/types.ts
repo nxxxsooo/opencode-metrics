@@ -21,10 +21,31 @@ export interface RequestMetrics {
   exactCacheWriteTokens: number
   exactReasoningTokens: number
   hasExactTokens: boolean               // Whether exact values have been received
+  hasExactCacheReadTokens: boolean
+  hasExactCacheWriteTokens: boolean
 
   // State
   isStreaming: boolean                  // Whether still streaming
   isComplete: boolean                   // Whether request is complete (idle)
+}
+
+export type MetricsScope = "current" | "tree"
+
+export type CacheReadCompleteness = "exact" | "partial" | "unknown"
+
+export interface MetricsAggregate {
+  sessionIDs: string[]
+  childSessionCount: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheReadCompleteness: CacheReadCompleteness
+  requestStartTime: number
+  firstTokenTime: number | null
+  completeTime: number | null
+  ttft: number | null
+  isStreaming: boolean
+  isComplete: boolean
 }
 
 export interface BarConfig {
