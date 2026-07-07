@@ -1,5 +1,5 @@
 // src/metrics.ts
-import type { BarConfig, RequestMetrics } from "./types"
+import type { BarConfig, CacheReadCompleteness, MetricsAggregate, RequestMetrics } from "./types"
 
 /**
  * Token estimation consistent with OpenCode internals:
@@ -32,6 +32,66 @@ export function getDisplayInputTokens(m: RequestMetrics): number {
     return Math.max(0, m.exactInputTokens + m.exactCacheReadTokens + m.exactCacheWriteTokens)
   }
   return Math.max(0, m.estimatedInputTokens)
+}
+
+export function formatCacheRead(n: number, completeness: CacheReadCompleteness): string {
+  if (completeness === "unknown") return "—"
+  return `${formatTokens(n)}${completeness === "partial" ? "+" : ""}`
+}
+
+export function aggregateRequestMetrics(
+  metrics: readonly RequestMetrics[],
+  now: number,
+): MetricsAggregate | null {
+  if (metrics.length === 0) return null
+
+  let inputTokens = 0
+  let outputTokens = 0
+  let cacheReadTokens = 0
+  let exactCacheCount = 0
+  let requestStartTime = Number.POSITIVE_INFINITY
+  let firstTokenTime: number | null = null
+  let completeTime: number | null = null
+  let isStreaming = false
+  let isComplete = true
+
+  for (const m of metrics) {
+    inputTokens += getDisplayInputTokens(m)
+    outputTokens += getDisplayOutputTokens(m)
+    if (m.hasExactCacheReadTokens) {
+      cacheReadTokens += Math.max(0, m.exactCacheReadTokens)
+      exactCacheCount += 1
+    }
+    requestStartTime = Math.min(requestStartTime, m.requestStartTime)
+    if (m.firstTokenTime !== null) {
+      firstTokenTime = firstTokenTime === null ? m.firstTokenTime : Math.min(firstTokenTime, m.firstTokenTime)
+    }
+    if (m.completeTime !== null) {
+      completeTime = completeTime === null ? m.completeTime : Math.max(completeTime, m.completeTime)
+    }
+    isStreaming = isStreaming || m.isStreaming
+    isComplete = isComplete && m.isComplete
+  }
+
+  const cacheReadCompleteness: CacheReadCompleteness =
+    exactCacheCount === 0 ? "unknown" : exactCacheCount === metrics.length ? "exact" : "partial"
+  const ttft = firstTokenTime === null ? null : Math.round(firstTokenTime - requestStartTime)
+  const sessionIDs = [...new Set(metrics.map((m) => m.sessionID))]
+
+  return {
+    sessionIDs,
+    childSessionCount: Math.max(0, sessionIDs.length - 1),
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheReadCompleteness,
+    requestStartTime,
+    firstTokenTime,
+    completeTime: completeTime ?? (isComplete ? now : null),
+    ttft,
+    isStreaming,
+    isComplete,
+  }
 }
 
 /**
@@ -106,7 +166,7 @@ export function formatBar(m: RequestMetrics, now: number, config?: BarConfig): s
   const ttft = getTtft(m)
   const inputTokens = getDisplayInputTokens(m)
   const outputTokens = getDisplayOutputTokens(m)
-  const cacheRead = m.hasExactTokens ? Math.max(0, m.exactCacheReadTokens) : 0
+  const cacheRead = m.hasExactCacheReadTokens ? Math.max(0, m.exactCacheReadTokens) : 0
   const elapsedMs = now - m.requestStartTime
   const vis = config?.visible
 
@@ -116,7 +176,9 @@ export function formatBar(m: RequestMetrics, now: number, config?: BarConfig): s
   if (!vis || vis.ttft)    parts.push(`⏱ ${ttft !== null ? formatDuration(ttft) : "--"}`)
   if (!vis || vis.input)   parts.push(`↓ ${formatTokens(inputTokens)} in`)
   if (!vis || vis.output)  parts.push(`↑ ${formatTokens(outputTokens)} out`)
-  if (m.hasExactTokens && (!vis || vis.cache))   parts.push(`○ ${formatTokens(cacheRead)}`)
+  if ((!vis || vis.cache) && (m.hasExactTokens || m.hasExactCacheReadTokens)) {
+    parts.push(`○ ${formatCacheRead(cacheRead, m.hasExactCacheReadTokens ? "exact" : "unknown")}`)
+  }
   if (!vis || vis.elapsed) parts.push(`▹ ${formatElapsed(elapsedMs)}`)
 
   if (!vis || vis.model) {
@@ -156,6 +218,8 @@ export function createFreshMetrics(
     exactCacheWriteTokens: 0,
     exactReasoningTokens: 0,
     hasExactTokens: false,
+    hasExactCacheReadTokens: false,
+    hasExactCacheWriteTokens: false,
     isStreaming: false,
     isComplete: false,
   }

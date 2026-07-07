@@ -102,6 +102,7 @@ describe("Edge cases", () => {
     m.exactOutputTokens = -50
     m.exactCacheReadTokens = -200
     m.hasExactTokens = true
+    m.hasExactCacheReadTokens = true
     expect(getDisplayOutputTokens(m)).toBe(0)
     const result = formatBar(m, 5000)
     expect(result).toContain("↓ 0 in")
@@ -109,12 +110,11 @@ describe("Edge cases", () => {
     expect(result).toContain("○ 0")
   })
 
-  test("child session events are filtered", () => {
-    const filter = (session: { id: string; parentID?: string | null }) => !session.parentID
+  test("child session events remain available for tree scope", () => {
+    const isChildSession = (session: { readonly id: string; readonly parentID?: string }) => Boolean(session.parentID)
 
-    expect(filter({ id: "ses_main" })).toBe(true)
-    expect(filter({ id: "ses_main", parentID: null })).toBe(true)
-    expect(filter({ id: "ses_child", parentID: "ses_main" })).toBe(false)
+    expect(isChildSession({ id: "ses_main" })).toBe(false)
+    expect(isChildSession({ id: "ses_child", parentID: "ses_main" })).toBe(true)
   })
 })
 

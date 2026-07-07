@@ -12,6 +12,8 @@ import {
   formatSessionElapsed,
   formatBar,
   createFreshMetrics,
+  aggregateRequestMetrics,
+  formatCacheRead,
 } from "../src/metrics"
 
 describe("estimateTokens", () => {
@@ -53,8 +55,10 @@ describe("getDisplayInputTokens", () => {
   test("returns exact input tokens when available", () => {
     const m = createFreshMetrics("ses_1", "msg_1", "claude-sonnet-4", "anthropic", 1000)
     m.exactInputTokens = 1200
+    m.exactCacheReadTokens = 300
+    m.hasExactCacheReadTokens = true
     m.hasExactTokens = true
-    expect(getDisplayInputTokens(m)).toBe(1200)
+    expect(getDisplayInputTokens(m)).toBe(1500)
   })
 
   test("returns 0 when no exact value", () => {
@@ -147,6 +151,7 @@ describe("formatBar", () => {
     m.exactOutputTokens = 600
     m.exactReasoningTokens = 39
     m.exactCacheReadTokens = 200
+    m.hasExactCacheReadTokens = true
     m.hasExactTokens = true
     m.modelID = "claude-sonnet-4"
     m.providerID = "anthropic"
@@ -211,9 +216,81 @@ describe("createFreshMetrics", () => {
     expect(m.exactOutputTokens).toBe(0)
     expect(m.exactCacheReadTokens).toBe(0)
     expect(m.exactCacheWriteTokens).toBe(0)
+    expect(m.hasExactCacheReadTokens).toBe(false)
+    expect(m.hasExactCacheWriteTokens).toBe(false)
     expect(m.exactReasoningTokens).toBe(0)
     expect(m.hasExactTokens).toBe(false)
     expect(m.isStreaming).toBe(false)
     expect(m.isComplete).toBe(false)
+  })
+})
+
+describe("aggregateRequestMetrics", () => {
+  test("sums in/out/cache-read across a session tree", () => {
+    // Given: main session + child-agent latest request metrics.
+    const main = createFreshMetrics("ses_main", "msg_main", "claude", "anthropic", 1000)
+    main.firstTokenTime = 1100
+    main.exactInputTokens = 12800
+    main.exactOutputTokens = 4000
+    main.exactReasoningTokens = 100
+    main.exactCacheReadTokens = 38200
+    main.hasExactTokens = true
+    main.hasExactCacheReadTokens = true
+
+    const child = createFreshMetrics("ses_child", "msg_child", "claude", "anthropic", 2000)
+    child.firstTokenTime = 2100
+    child.exactInputTokens = 5000
+    child.exactOutputTokens = 900
+    child.exactCacheReadTokens = 1200
+    child.hasExactTokens = true
+    child.hasExactCacheReadTokens = true
+
+    // When: aggregating in tree scope.
+    const aggregate = aggregateRequestMetrics([main, child], 4100)
+
+    // Then: input/output/cache-read are summed without cache de-dupe or subtraction.
+    expect(aggregate).not.toBeNull()
+    expect(aggregate?.inputTokens).toBe(57200)
+    expect(aggregate?.outputTokens).toBe(5000)
+    expect(aggregate?.cacheReadTokens).toBe(39400)
+    expect(aggregate?.cacheReadCompleteness).toBe("exact")
+  })
+
+  test("marks cache-read as partial when some tree requests lack cache fields", () => {
+    // Given: one exact cache-read and one provider response with no cache field.
+    const known = createFreshMetrics("ses_main", "msg_main", "claude", "anthropic", 1000)
+    known.exactInputTokens = 1000
+    known.exactOutputTokens = 200
+    known.exactCacheReadTokens = 38200
+    known.hasExactTokens = true
+    known.hasExactCacheReadTokens = true
+
+    const missing = createFreshMetrics("ses_child", "msg_child", "claude", "anthropic", 1200)
+    missing.exactInputTokens = 2000
+    missing.exactOutputTokens = 300
+    missing.hasExactTokens = true
+
+    // When: aggregating mixed cache precision.
+    const aggregate = aggregateRequestMetrics([known, missing], 2000)
+
+    // Then: known cache is preserved as a lower bound.
+    expect(aggregate?.cacheReadTokens).toBe(38200)
+    expect(aggregate?.cacheReadCompleteness).toBe("partial")
+    expect(formatCacheRead(aggregate?.cacheReadTokens ?? 0, aggregate?.cacheReadCompleteness ?? "unknown")).toBe("38.2K+")
+  })
+
+  test("marks cache-read as unknown when no request has cache fields", () => {
+    // Given: exact token usage without cache fields.
+    const request = createFreshMetrics("ses_main", "msg_main", "claude", "anthropic", 1000)
+    request.exactInputTokens = 1000
+    request.exactOutputTokens = 200
+    request.hasExactTokens = true
+
+    // When: aggregating cache.
+    const aggregate = aggregateRequestMetrics([request], 2000)
+
+    // Then: display uses the compact unknown marker.
+    expect(aggregate?.cacheReadCompleteness).toBe("unknown")
+    expect(formatCacheRead(aggregate?.cacheReadTokens ?? 0, aggregate?.cacheReadCompleteness ?? "unknown")).toBe("—")
   })
 })
