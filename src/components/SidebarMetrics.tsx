@@ -1,21 +1,18 @@
 /** @jsxImportSource @opentui/solid */
 /** @jsxRuntime automatic */
 import { createSignal, onCleanup } from "solid-js"
+import type { BoxRenderable } from "@opentui/core"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import type { BarConfig, RequestMetrics } from "../types"
+import type { BarConfig, MetricsAggregate, MetricsScope } from "../types"
 import type { MetricsCollector } from "../collector"
 import {
     formatTokens,
     formatDuration,
     formatElapsed,
     formatSessionElapsed,
-    getDisplayInputTokens,
-    getDisplayOutputTokens,
-    getTtft,
-    getTps,
+    formatCacheRead,
 } from "../metrics"
 import { StatRow } from "./StatRow"
-import { badgeTextColor } from "../badge-contrast"
 import type { MetricsSidebarController } from "../tui-preferences"
 
 interface SidebarMetricsProps {
@@ -40,17 +37,25 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
     const unsubController = props.controller.subscribe(bump)
     onCleanup(unsubController)
 
-    const metrics = () => {
+    const scope = (): MetricsScope => props.controller.prefs().scope
+    const aggregate = () => {
         tick()
-        return props.collector.getCurrent(props.sessionID)
+        return props.collector.getAggregate(props.sessionID, scope())
     }
     const now = () => {
         tick()
         return performance.now()
     }
-    const requestNow = (m: RequestMetrics): number => {
+    const requestNow = (m: MetricsAggregate): number => {
         const live = now()
         return m.isComplete && m.completeTime !== null ? m.completeTime : live
+    }
+
+    const aggregateTps = (m: MetricsAggregate, frozen: number): number => {
+        const baseTime = m.firstTokenTime ?? m.requestStartTime
+        const elapsedMs = frozen - baseTime
+        if (elapsedMs <= 0) return 0
+        return Math.round((m.outputTokens / (elapsedMs / 1000)) * 10) / 10
     }
 
     const rowVisible = (key: keyof BarConfig["visible"]): boolean => {
@@ -61,15 +66,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
 
     const sessionStartTime = (): number | null => {
         tick()
-        return props.collector.getSessionStartTime(props.sessionID)
-    }
-
-    const statusLabel = (): { text: string; color: "success" | "warning" | "accent" | "dim" } => {
-        const m = metrics()
-        if (!m) return { text: "idle", color: "dim" }
-        if (m.isStreaming) return { text: "streaming", color: "warning" }
-        if (m.isComplete) return { text: "complete", color: "success" }
-        return { text: "waiting", color: "accent" }
+        return props.collector.getSessionStartTime(props.sessionID, scope())
     }
 
     if (!props.controller.prefs().section.enabled) {
@@ -81,50 +78,40 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
         return props.controller.collapsed()
     }
     const headerLabel = () => props.controller.prefs().section.label
+    const toggleCollapsed = () => props.controller.toggleCollapsed()
+    const attachBoxToggle = (node: BoxRenderable) => {
+        node.onMouseDown = toggleCollapsed
+    }
 
     return (
         <box
             width="100%"
             flexDirection="column"
-            paddingLeft={1}
-            paddingRight={1}
         >
             <box
+                width="100%"
                 flexDirection="row"
-                justifyContent="space-between"
                 alignItems="center"
-                onMouseDown={() => props.controller.toggleCollapsed()}
+                ref={attachBoxToggle}
             >
-                <box
-                    paddingLeft={1}
-                    paddingRight={1}
-                    backgroundColor={props.theme.accent}
+                <text
+                    fg={props.theme.text}
                 >
-                    <text fg={badgeTextColor(props.theme.accent, props.theme.background)}>
-                        <b>{collapsed() ? "▶ " : "▼ "}{headerLabel()}</b>
-                    </text>
-                </box>
-                {(() => {
-                    const s = statusLabel()
-                    const color = s.color === "success" ? props.theme.success
-                        : s.color === "warning" ? props.theme.warning
-                        : s.color === "accent" ? props.theme.accent
-                        : props.theme.textMuted
-                    return <text fg={color}><b>{s.text}</b></text>
-                })()}
+                    <b>{collapsed() ? "▶ " : "▼ "}{headerLabel()}</b>
+                </text>
             </box>
 
             {!collapsed() && (
-                metrics() ? (
+                aggregate() ? (
                     <box width="100%" flexDirection="column" marginTop={1}>
                         {(() => {
-                            const m = metrics()!
+                            const m = aggregate()
+                            if (m === null) return <></>
                             const frozen = requestNow(m)
-                            const tps = getTps(m, frozen)
-                            const ttft = getTtft(m)
-                            const inputTokens = getDisplayInputTokens(m)
-                            const outputTokens = getDisplayOutputTokens(m)
-                            const cacheRead = m.hasExactTokens ? Math.max(0, m.exactCacheReadTokens) : 0
+                            const tps = aggregateTps(m, frozen)
+                            const ttft = m.ttft
+                            const inputTokens = m.inputTokens
+                            const outputTokens = m.outputTokens
                             const elapsedMs = frozen - m.requestStartTime
 
                             return (
@@ -161,11 +148,11 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                                             value={`${rowVisible("input") ? `↓ ${formatTokens(inputTokens)} in` : ""}${rowVisible("input") && rowVisible("output") ? "  " : ""}${rowVisible("output") ? `↑ ${formatTokens(outputTokens)} out` : ""}`}
                                         />
                                     )}
-                                    {m.hasExactTokens && rowVisible("cache") && (
+                                    {rowVisible("cache") && (
                                         <StatRow
                                             theme={props.theme}
                                             label="Cache"
-                                            value={formatTokens(cacheRead)}
+                                            value={formatCacheRead(m.cacheReadTokens, m.cacheReadCompleteness)}
                                             dim
                                             icon="○"
                                         />
@@ -197,12 +184,13 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                 )
             )}
 
-            {collapsed() && metrics() && (
+            {collapsed() && aggregate() && (
                 <box width="100%" flexDirection="column" marginTop={1}>
                     {(() => {
-                        const m = metrics()!
+                        const m = aggregate()
+                        if (m === null) return <></>
                         const frozen = requestNow(m)
-                        const tps = getTps(m, frozen)
+                        const tps = aggregateTps(m, frozen)
 
                         return (
                             <>
