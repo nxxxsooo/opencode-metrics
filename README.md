@@ -54,6 +54,31 @@ For the **current** session, during and after a request:
 
 The header badge shows request state: `idle` · `waiting` · `streaming` · `complete`.
 
+## Current vs tree scope
+
+By default, Metrics is strict per-session: it shows only the session attached to the current TUI pane.
+
+Set `scope` to `tree` when you want the current session plus known child/sub-agent sessions:
+
+```jsonc
+// ~/.config/opencode/tui-preferences.jsonc
+{
+  "opencode-metrics": {
+    "scope": "tree"
+  }
+}
+```
+
+Tree mode is intentionally conservative:
+
+- It only includes sessions with a real OpenCode parent-child link; unlinked sessions are never guessed into the total.
+- It aggregates the latest visible request for the current session and each known descendant session.
+- Input, output, and cache-read tokens are summed directly. Cache reads are **not** deduplicated or subtracted from input.
+- Cache precision is explicit: exact cache shows normally, partial cache shows a `+` suffix, and unknown cache shows `—`.
+- The header adds a child-session badge in tree scope, for example `streaming +3`.
+
+`Session` is wall-clock time for the selected scope, starting from the earliest observed session in the current tree. `Elapsed` remains request-level timing.
+
 ## Collapsed vs expanded
 
 Click the header badge to toggle:
@@ -73,6 +98,7 @@ Presentation preferences live in the shared `tui-preferences.jsonc` (same file M
   "opencode-metrics": {
     "order": 160,          // sidebar position (OpenCode built-ins occupy 100-500)
     "forceToTop": false,   // sort above the normal band
+    "scope": "current",    // current | tree
     "section": {
       "enabled": true,
       "collapsed": null,   // null | true | false; persisted when rememberCollapsed
@@ -121,7 +147,10 @@ NOTES:
 - It is a TUI plugin (package.json: "oc-plugin": ["tui"]); it only renders
   inside the OpenCode TUI, not in headless/CI runs.
 - It is per-session by design: under `opencode serve` each attached session
-  shows its own metrics, never a global sum.
+- It defaults to per-session by design: under `opencode serve` each attached
+  session shows its own metrics, never a global sum.
+- If the user asks for sub-agent aggregation, set `scope` to `tree`. Do not
+  describe it as "all sessions"; it only aggregates known OpenCode descendants.
 ```
 
 ## Local development

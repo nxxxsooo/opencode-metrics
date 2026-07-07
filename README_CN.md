@@ -54,6 +54,31 @@
 
 标题徽标显示请求状态：`idle` · `waiting` · `streaming` · `complete`。
 
+## current vs tree scope
+
+默认情况下，Metrics 是严格分会话的：只显示当前 TUI pane attach 的那个会话。
+
+如果想显示当前会话 + 已知子代理 / 子会话，把 `scope` 设成 `tree`：
+
+```jsonc
+// ~/.config/opencode/tui-preferences.jsonc
+{
+  "opencode-metrics": {
+    "scope": "tree"
+  }
+}
+```
+
+Tree 模式刻意保守：
+
+- 只纳入有真实 OpenCode 父子关系的会话；不会把无关联会话猜进总数。
+- 聚合当前会话和每个已知后代会话的最新可见请求。
+- input、output、cache-read token 直接求和。cache read 不去重，也不从 input 里扣掉。
+- 缓存精度会明示：完整缓存正常显示，部分缓存带 `+` 后缀，未知缓存显示 `—`。
+- Tree scope 下标题会带子会话徽标，例如 `streaming +3`。
+
+`Session` 是所选 scope 的墙钟时间，从当前树中最早被观察到的会话开始算。`Elapsed` 仍然是请求级计时。
+
 ## 折叠 vs 展开
 
 点击标题徽标切换：
@@ -73,6 +98,7 @@
   "opencode-metrics": {
     "order": 160,          // 侧边栏位置（OpenCode 内置占 100-500）
     "forceToTop": false,   // 排到普通区段之上
+    "scope": "current",    // current | tree
     "section": {
       "enabled": true,
       "collapsed": null,   // null | true | false；rememberCollapsed 时持久化
@@ -119,8 +145,10 @@ bun run init:prefs
 说明：
 - 它是 TUI 插件（package.json: "oc-plugin": ["tui"]）；只在 OpenCode
   TUI 里渲染，不在无头 / CI 运行中显示。
-- 它的设计就是分会话的：`opencode serve` 下每个 attach 的会话显示
+- 它默认就是分会话的：`opencode serve` 下每个 attach 的会话显示
   自己的指标，绝不全局求和。
+- 如果用户要求子代理聚合，把 `scope` 设成 `tree`。不要说成「所有会话」；
+  它只聚合 OpenCode 已知后代会话。
 ```
 
 ## 本地开发
