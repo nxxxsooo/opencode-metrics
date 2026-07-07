@@ -22,12 +22,16 @@
     "dist/tui.d.ts",
     "src/tui.tsx",
     "src/tui-preferences.ts",
+    "src/tui-prefs-io.ts",
     "src/badge-contrast.ts",
     "src/collector.ts",
     "src/config.ts",
     "src/logger.ts",
     "src/metrics.ts",
+    "src/request-updates.ts",
+    "src/session-tree.ts",
     "src/types.ts",
+    "src/event-shapes.ts",
     "src/components/SidebarMetrics.tsx",
     "src/components/StatRow.tsx",
     "src/scripts/init-tui-preferences.ts",
@@ -47,8 +51,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@opentui/core": "0.3.4",
-    "@opentui/solid": "0.3.4",
+    "@opentui/core": "0.4.3",
+    "@opentui/solid": "0.4.3",
     "comment-json": "^5.0.0",
     "solid-js": "^1.9.12"
   },
