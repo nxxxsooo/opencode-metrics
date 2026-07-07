@@ -11,9 +11,9 @@ import {
     createMetricsSidebarController,
     DEFAULT_SLOT_ORDER,
     PLUGIN_KEY,
-    readTuiPreferencesFileSync,
     resolveMetricsPrefs,
 } from "./tui-preferences"
+import { readTuiPreferencesFileSync } from "./tui-prefs-io"
 
 const plugin: TuiPlugin = async (api: TuiPluginApi, _options: PluginOptions | undefined, _meta: TuiPluginMeta) => {
     const config = getConfig()

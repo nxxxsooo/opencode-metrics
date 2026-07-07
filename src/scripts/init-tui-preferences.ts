@@ -15,10 +15,10 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "
 import { dirname } from "node:path"
 import { parse, stringify } from "comment-json"
 import {
-    getTuiPreferencesFile,
     DEFAULT_PREFS,
     PLUGIN_KEY,
 } from "../tui-preferences"
+import { getTuiPreferencesFile } from "../tui-prefs-io"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value)

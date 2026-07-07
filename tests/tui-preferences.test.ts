@@ -4,15 +4,17 @@ import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import {
-    getTuiPreferencesFile,
-    readTuiPreferencesFileSync,
     resolveMetricsPrefs,
     computeEffectiveOrder,
     DEFAULT_PREFS,
     DEFAULT_SLOT_ORDER,
     PLUGIN_KEY,
-    queueTuiPreferenceUpdate,
 } from "../src/tui-preferences"
+import {
+    getTuiPreferencesFile,
+    readTuiPreferencesFileSync,
+    queueTuiPreferenceUpdate,
+} from "../src/tui-prefs-io"
 
 const TUI_PREFS_FILE_ENV = "OPENCODE_TUI_PREFERENCES_FILE"
 
@@ -103,6 +105,17 @@ describe("resolveMetricsPrefs", () => {
     test("empty root returns full defaults", () => {
         const resolved = resolveMetricsPrefs({})
         expect(resolved).toEqual(DEFAULT_PREFS)
+        expect(resolved.scope).toBe("current")
+    })
+
+    test("scope accepts current or tree", () => {
+        expect(resolveMetricsPrefs({ [PLUGIN_KEY]: { scope: "current" } }).scope).toBe("current")
+        expect(resolveMetricsPrefs({ [PLUGIN_KEY]: { scope: "tree" } }).scope).toBe("tree")
+    })
+
+    test("bad scope falls back to current", () => {
+        expect(resolveMetricsPrefs({ [PLUGIN_KEY]: { scope: "global" } }).scope).toBe("current")
+        expect(resolveMetricsPrefs({ [PLUGIN_KEY]: { scope: false } }).scope).toBe("current")
     })
 
     test("non-object plugin key returns full defaults", () => {
