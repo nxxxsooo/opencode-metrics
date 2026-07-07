@@ -1,38 +1,18 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Event } from "@opencode-ai/sdk/v2"
-import type { BarConfig, RequestMetrics } from "./types"
-import { createFreshMetrics, estimateTokens } from "./metrics"
-
-interface SessionInfoExt {
-  id?: string
-  parentID?: string | null
-}
-interface AssistantMessageExt {
-  role?: string
-  modelID?: string
-  providerID?: string
-  tokens?: {
-    input?: number
-    output?: number
-    reasoning?: number
-    cache?: { read?: number; write?: number }
-  }
-}
-interface UserMessageExt {
-  id?: string
-  role?: string
-}
-interface PartExt {
-  type?: string
-  messageID?: string
-  text?: string
-}
+import type { BarConfig, MetricsAggregate, MetricsScope, RequestMetrics } from "./types"
+import { aggregateRequestMetrics, createFreshMetrics, estimateTokens } from "./metrics"
+import { parseAssistantMessage, parseSessionInfo, parseTextPart, parseUserMessage } from "./event-shapes"
+import { applyAssistantTokens, applySessionModel, mergeAssistantModel } from "./request-updates"
+import { createSessionTree } from "./session-tree"
 
 export type MetricsListener = () => void
 
 export interface MetricsCollector {
   getCurrent(sessionID: string): RequestMetrics | null
-  getSessionStartTime(sessionID: string): number | null
+  getAggregate(sessionID: string, scope: MetricsScope, now?: number): MetricsAggregate | null
+  getSessionStartTime(sessionID: string, scope?: MetricsScope): number | null
+  getChildSessionCount(sessionID: string): number
   subscribe(listener: MetricsListener): () => void
   dispose(): void
 }
@@ -44,20 +24,12 @@ export function createCollector(
 ): MetricsCollector {
   const requests = new Map<string, RequestMetrics>()
   const holdTimers = new Map<string, ReturnType<typeof setTimeout>>()
-  const sessionParents = new Map<string, string | null | undefined>()
-  const sessionModels = new Map<string, { modelID: string; providerID: string }>()
+  const sessionTree = createSessionTree()
+  const sessionModels = new Map<string, { readonly modelID: string; readonly providerID: string }>()
   const sessionStartTimes = new Map<string, number>()
   const userMessageIds = new Map<string, Set<string>>()
   const listeners = new Set<MetricsListener>()
   const disposers: Array<() => void> = []
-
-  const defaultFilter = (session: { parentID?: string | null }) => !session.parentID
-
-  function shouldTrackSession(sessionID: string): boolean {
-    const parentID = sessionParents.get(sessionID)
-    if (parentID === undefined) return true
-    return defaultFilter({ parentID })
-  }
 
   function notify(): void {
     for (const listener of listeners) listener()
@@ -77,26 +49,29 @@ export function createCollector(
     }
   }
 
+  function recordSession(value: unknown, now: number, defaultParentWhenMissing: boolean): void {
+    const info = parseSessionInfo(value)
+    if (!info) return
+    if (info.hasParentID) {
+      sessionTree.setParent(info.id, info.parentID)
+    } else if (defaultParentWhenMissing) {
+      sessionTree.setParent(info.id, null)
+    }
+    ensureSessionStart(info.id, now)
+  }
+
   // ── session.created ──
   disposers.push(api.event.on("session.created", (event: Extract<Event, { type: "session.created" }>) => {
     const info = event.properties.info
-    if (info?.id) {
-      sessionParents.set(info.id, (info as SessionInfoExt).parentID ?? null)
-      if (shouldTrackSession(info.id)) {
-        ensureSessionStart(info.id, performance.now())
-      }
-    }
+    recordSession(info, performance.now(), true)
+    notify()
   }))
 
   // ── session.updated ──
   disposers.push(api.event.on("session.updated", (event: Extract<Event, { type: "session.updated" }>) => {
     const info = event.properties.info
-    if (info?.id) {
-      sessionParents.set(info.id, (info as SessionInfoExt).parentID ?? null)
-      if (shouldTrackSession(info.id)) {
-        ensureSessionStart(info.id, performance.now())
-      }
-    }
+    recordSession(info, performance.now(), false)
+    notify()
   }))
 
   // ── session.status ──
@@ -104,7 +79,6 @@ export function createCollector(
     const sessionID = event.properties.sessionID
     const status = event.properties.status
     log(`session.status: ${sessionID} -> ${status?.type}`)
-    if (!shouldTrackSession(sessionID)) return
     ensureSessionStart(sessionID, performance.now())
 
     if (status?.type === "busy") {
@@ -149,18 +123,13 @@ export function createCollector(
     const messageID = event.properties.messageID
     const delta = event.properties.delta ?? ""
     const field = event.properties.field ?? ""
-    if (!shouldTrackSession(sessionID)) return
     if (field !== "text") return
     ensureSessionStart(sessionID, performance.now())
 
     let current = requests.get(sessionID)
     if (!current) {
       current = createFreshMetrics(sessionID, messageID, "", "", performance.now())
-      const cached = sessionModels.get(sessionID)
-      if (cached) {
-        current.modelID = cached.modelID
-        current.providerID = cached.providerID
-      }
+      applySessionModel(current, sessionModels.get(sessionID))
       requests.set(sessionID, current)
     }
 
@@ -177,9 +146,8 @@ export function createCollector(
   // ── message.part.updated ──
   disposers.push(api.event.on("message.part.updated", (event: Extract<Event, { type: "message.part.updated" }>) => {
     const sessionID = event.properties.sessionID
-    const part = event.properties.part as PartExt
-    if (!part || part.type !== "text" || !part.messageID || !part.text) return
-    if (!shouldTrackSession(sessionID)) return
+    const part = parseTextPart(event.properties.part)
+    if (!part) return
     ensureSessionStart(sessionID, performance.now())
     const msgIds = userMessageIds.get(sessionID)
     if (!msgIds || !msgIds.has(part.messageID)) return
@@ -196,54 +164,31 @@ export function createCollector(
   disposers.push(api.event.on("message.updated", (event: Extract<Event, { type: "message.updated" }>) => {
     const sessionID = event.properties.sessionID
     const info = event.properties.info
-    if (!shouldTrackSession(sessionID)) return
     ensureSessionStart(sessionID, performance.now())
 
-    const role: string = (info as AssistantMessageExt)?.role ?? ""
-
-    if (role === "assistant") {
-      const mid = (info as AssistantMessageExt).modelID
-      const pid = (info as AssistantMessageExt).providerID
-      if (mid || pid) {
-        const existing = sessionModels.get(sessionID)
-        sessionModels.set(sessionID, {
-          modelID: mid || existing?.modelID || "",
-          providerID: pid || existing?.providerID || "",
-        })
-      }
+    const assistant = parseAssistantMessage(info)
+    if (assistant) {
+      const nextModel = mergeAssistantModel(sessionModels.get(sessionID), assistant)
+      if (nextModel) sessionModels.set(sessionID, nextModel)
 
       const current = requests.get(sessionID)
       if (current) {
-        const tokens = (info as AssistantMessageExt).tokens
+        const tokens = assistant.tokens
         if (tokens) {
-          const input = Math.max(0, tokens.input ?? 0)
-          const output = Math.max(0, tokens.output ?? 0)
-          const reasoning = Math.max(0, tokens.reasoning ?? 0)
-          const cacheRead = Math.max(0, tokens.cache?.read ?? 0)
-          const cacheWrite = Math.max(0, tokens.cache?.write ?? 0)
-          if (input + output + reasoning + cacheRead + cacheWrite > 0) {
-            current.exactInputTokens = input
-            current.exactOutputTokens = output
-            current.exactReasoningTokens = reasoning
-            current.exactCacheReadTokens = cacheRead
-            current.exactCacheWriteTokens = cacheWrite
-            current.hasExactTokens = true
-            log(`exact: in=${input} out=${output} cr=${cacheRead} cw=${cacheWrite}`)
+          if (applyAssistantTokens(current, tokens)) {
+            log(`exact: in=${tokens.input} out=${tokens.output} cr=${tokens.cacheRead} cw=${tokens.cacheWrite}`)
           } else {
             log(`assistant tokens all zero, skipping overwrite`)
           }
         }
-        const cached = sessionModels.get(sessionID)
-        if (cached) {
-          current.modelID = cached.modelID
-          current.providerID = cached.providerID
-        }
+        applySessionModel(current, sessionModels.get(sessionID))
         notify()
       }
     }
 
-    if (role === "user") {
-      const userMsgID = (info as UserMessageExt).id ?? ""
+    const user = parseUserMessage(info)
+    if (user) {
+      const userMsgID = user.messageID
       const current = requests.get(sessionID)
       if (current && current.messageID === userMsgID) {
         return
@@ -258,11 +203,7 @@ export function createCollector(
         msgIds.add(userMsgID)
       }
       log(`user msg: id=${userMsgID}`)
-      const cached = sessionModels.get(sessionID)
-      if (cached) {
-        fresh.modelID = cached.modelID
-        fresh.providerID = cached.providerID
-      }
+      applySessionModel(fresh, sessionModels.get(sessionID))
       requests.set(sessionID, fresh)
       notify()
     }
@@ -271,7 +212,7 @@ export function createCollector(
   // ── session.deleted ──
   disposers.push(api.event.on("session.deleted", (event: Extract<Event, { type: "session.deleted" }>) => {
     const sessionID = event.properties.sessionID
-    sessionParents.delete(sessionID)
+    sessionTree.deleteSession(sessionID)
     sessionModels.delete(sessionID)
     sessionStartTimes.delete(sessionID)
     userMessageIds.delete(sessionID)
@@ -286,8 +227,25 @@ export function createCollector(
     getCurrent(sessionID: string): RequestMetrics | null {
       return requests.get(sessionID) ?? null
     },
-    getSessionStartTime(sessionID: string): number | null {
-      return sessionStartTimes.get(sessionID) ?? null
+    getAggregate(sessionID: string, scope: MetricsScope, now = performance.now()): MetricsAggregate | null {
+      const ids = sessionTree.getScopeSessionIDs(sessionID, scope)
+      const metrics = ids.map((id) => requests.get(id)).filter((m): m is RequestMetrics => m !== undefined)
+      const aggregate = aggregateRequestMetrics(metrics, now)
+      if (!aggregate) return null
+      return {
+        ...aggregate,
+        childSessionCount: scope === "tree" ? sessionTree.getChildSessionCount(sessionID) : 0,
+      }
+    },
+    getSessionStartTime(sessionID: string, scope: MetricsScope = "current"): number | null {
+      const starts = sessionTree
+        .getScopeSessionIDs(sessionID, scope)
+        .map((id) => sessionStartTimes.get(id))
+        .filter((start): start is number => start !== undefined)
+      return starts.length === 0 ? null : Math.min(...starts)
+    },
+    getChildSessionCount(sessionID: string): number {
+      return sessionTree.getChildSessionCount(sessionID)
     },
     subscribe(listener: MetricsListener): () => void {
       listeners.add(listener)
@@ -298,7 +256,7 @@ export function createCollector(
       for (const timer of holdTimers.values()) clearTimeout(timer)
       holdTimers.clear()
       requests.clear()
-      sessionParents.clear()
+      sessionTree.clear()
       sessionModels.clear()
       sessionStartTimes.clear()
       userMessageIds.clear()
