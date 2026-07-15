@@ -21,8 +21,13 @@ export function applySessionModel(metrics: RequestMetrics, model: SessionModel |
   metrics.providerID = model.providerID
 }
 
+export function hasPositiveAssistantTokens(tokens: AssistantTokenUpdate | null | undefined): tokens is AssistantTokenUpdate {
+  if (!tokens?.hasAny) return false
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cacheRead + tokens.cacheWrite > 0
+}
+
 export function applyAssistantTokens(metrics: RequestMetrics, tokens: AssistantTokenUpdate): boolean {
-  if (!tokens.hasAny) return false
+  if (!hasPositiveAssistantTokens(tokens)) return false
   metrics.exactInputTokens = tokens.input
   metrics.exactOutputTokens = tokens.output
   metrics.exactReasoningTokens = tokens.reasoning

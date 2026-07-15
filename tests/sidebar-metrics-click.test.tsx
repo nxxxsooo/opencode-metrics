@@ -8,13 +8,14 @@ import { SidebarMetrics } from "../src/components/SidebarMetrics"
 import { DEFAULT_CONFIG } from "../src/types"
 import { DEFAULT_PREFS } from "../src/tui-preferences"
 import type { MetricsCollector, MetricsListener } from "../src/collector"
+import type { MetricsAggregate } from "../src/types"
 import type { MetricsSidebarController } from "../src/tui-preferences"
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 
 const collector: MetricsCollector = {
     getCurrent: () => null,
     getAggregate: () => null,
-    getSessionStartTime: () => null,
+    getSessionElapsedMs: () => 0,
     getChildSessionCount: () => 0,
     subscribe: (_listener: MetricsListener) => () => {},
     dispose: () => {},
@@ -87,6 +88,192 @@ function createTheme(): TuiThemeCurrent {
 }
 
 describe("SidebarMetrics header click", () => {
+    test("collector updates rerender metric rows", async () => {
+        // Given: the sidebar starts idle before OpenCode has delivered token metrics.
+        let listener: MetricsListener | null = null
+        let aggregate: MetricsAggregate | null = null
+        const dynamicCollector: MetricsCollector = {
+            ...collector,
+            getAggregate: () => aggregate,
+            getSessionElapsedMs: () => aggregate ? 1200 : 0,
+            subscribe: (next: MetricsListener) => {
+                listener = next
+                return () => {
+                    listener = null
+                }
+            },
+        }
+        const prefs = structuredClone(DEFAULT_PREFS)
+        const controller: MetricsSidebarController = {
+            prefs: () => prefs,
+            collapsed: () => false,
+            toggleCollapsed: () => {},
+            subscribe: () => () => {},
+        }
+        let requestRender = () => {}
+
+        const setup = await testRender(
+            () => (
+                <SidebarMetrics
+                    sessionID="ses_test"
+                    collector={dynamicCollector}
+                    refreshIntervalMs={10_000}
+                    barConfig={DEFAULT_CONFIG}
+                    theme={createTheme()}
+                    controller={controller}
+                    requestRender={() => requestRender()}
+                />
+            ),
+            { width: 60, height: 14, useMouse: true },
+        )
+        requestRender = () => setup.renderer.requestRender()
+
+        try {
+            await setup.flush()
+            expect(setup.captureCharFrame()).toContain("No active request")
+
+            aggregate = {
+                sessionIDs: ["ses_runtime"],
+                childSessionCount: 0,
+                inputTokens: 123,
+                outputTokens: 4,
+                cacheReadTokens: 0,
+                cacheReadCompleteness: "exact",
+                requestStartTime: performance.now() - 1200,
+                firstTokenTime: null,
+                completeTime: null,
+                ttft: null,
+                isStreaming: false,
+                isComplete: true,
+            }
+            listener?.()
+
+            const frame = await setup.waitForFrame((value) => value.includes("↓ 123 in") && value.includes("↑ 4 out"))
+            expect(frame).not.toContain("No active request")
+        } finally {
+            setup.renderer.destroy()
+        }
+    })
+
+    test("collapsed sidebar shows compact speed and session rows only when active", async () => {
+        // Given: a collapsed sidebar has no request yet.
+        let listener: MetricsListener | null = null
+        let aggregate: MetricsAggregate | null = null
+        const dynamicCollector: MetricsCollector = {
+            ...collector,
+            getAggregate: () => aggregate,
+            getSessionElapsedMs: () => aggregate ? 1200 : 0,
+            subscribe: (next: MetricsListener) => {
+                listener = next
+                return () => {
+                    listener = null
+                }
+            },
+        }
+        const prefs = structuredClone(DEFAULT_PREFS)
+        const controller: MetricsSidebarController = {
+            prefs: () => prefs,
+            collapsed: () => true,
+            toggleCollapsed: () => {},
+            subscribe: () => () => {},
+        }
+        let requestRender = () => {}
+
+        const setup = await testRender(
+            () => (
+                <SidebarMetrics
+                    sessionID="ses_test"
+                    collector={dynamicCollector}
+                    refreshIntervalMs={10_000}
+                    barConfig={DEFAULT_CONFIG}
+                    theme={createTheme()}
+                    controller={controller}
+                    requestRender={() => requestRender()}
+                />
+            ),
+            { width: 60, height: 10, useMouse: true },
+        )
+        requestRender = () => setup.renderer.requestRender()
+
+        try {
+            await setup.flush()
+            expect(setup.captureCharFrame()).not.toContain("Speed")
+            expect(setup.captureCharFrame()).not.toContain("Tokens")
+
+            aggregate = {
+                sessionIDs: ["ses_runtime"],
+                childSessionCount: 0,
+                inputTokens: 123,
+                outputTokens: 4,
+                cacheReadTokens: 0,
+                cacheReadCompleteness: "exact",
+                requestStartTime: performance.now() - 1200,
+                firstTokenTime: null,
+                completeTime: null,
+                ttft: null,
+                isStreaming: false,
+                isComplete: true,
+            }
+            listener?.()
+
+            const frame = await setup.waitForFrame((value) => value.includes("Speed") && value.includes("Session"))
+            expect(frame).not.toContain("Tokens")
+            expect(frame).not.toContain("Elapsed")
+            expect(frame).not.toContain("TTFT")
+        } finally {
+            setup.renderer.destroy()
+        }
+    })
+
+    test("collector updates request a TUI render", async () => {
+        // Given: a sidebar wired to a collector subscription and a renderer hook.
+        let listener: MetricsListener | null = null
+        let renderRequests = 0
+        const notifyingCollector: MetricsCollector = {
+            ...collector,
+            subscribe: (next: MetricsListener) => {
+                listener = next
+                return () => {
+                    listener = null
+                }
+            },
+        }
+        const prefs = structuredClone(DEFAULT_PREFS)
+        const controller: MetricsSidebarController = {
+            prefs: () => prefs,
+            collapsed: () => false,
+            toggleCollapsed: () => {},
+            subscribe: () => () => {},
+        }
+
+        const setup = await testRender(
+            () => (
+                <SidebarMetrics
+                    sessionID="ses_test"
+                    collector={notifyingCollector}
+                    refreshIntervalMs={10_000}
+                    barConfig={DEFAULT_CONFIG}
+                    theme={createTheme()}
+                    controller={controller}
+                    requestRender={() => {
+                        renderRequests += 1
+                    }}
+                />
+            ),
+            { width: 40, height: 12, useMouse: true },
+        )
+
+        try {
+            await setup.flush()
+            listener?.()
+            await setup.flush()
+
+            expect(renderRequests).toBe(1)
+        } finally {
+            setup.renderer.destroy()
+        }
+    })
+
     test("clicking the header label toggles collapsed once", async () => {
         // Given: the sidebar header is rendered expanded with a counting controller.
         let collapsed = false

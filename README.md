@@ -50,7 +50,7 @@ For the **current** session, during and after a request:
 | **TTFT** | time to first token (`⏱`) |
 | **Tokens** | input + output on one line — `↓ in  ↑ out` |
 | **Cache** | cache-read tokens, when exact counts arrive (`○`) |
-| **Session** | whole-session run time, keeps ticking (`◷`) |
+| **Session** | cumulative active time for the session; freezes while idle (`◷`) |
 
 The header badge shows request state: `idle` · `waiting` · `streaming` · `complete`.
 
@@ -77,7 +77,7 @@ Tree mode is intentionally conservative:
 - Cache precision is explicit: exact cache shows normally, partial cache shows a `+` suffix, and unknown cache shows `—`.
 - The header adds a child-session badge in tree scope, for example `streaming +3`.
 
-`Session` is wall-clock time for the selected scope, starting from the earliest observed session in the current tree. `Elapsed` remains request-level timing.
+`Session` is cumulative active time for the selected scope. It advances while a request is busy, freezes when the session becomes idle, and resumes on the next request without counting the idle gap. When attaching to an existing session, completed assistant-message timings are restored from OpenCode's session state. `Elapsed` remains timing for the latest request.
 
 ## Collapsed vs expanded
 
@@ -86,7 +86,7 @@ Click the header badge to toggle:
 - **▼ Expanded** — full breakdown: Speed, Elapsed, TTFT, Tokens, Cache, Session.
 - **▶ Collapsed** — compact glance: **Speed + Session** only (or just the header when idle).
 
-When a request finishes, the last numbers **stay visible** until the next request — Speed and Elapsed freeze at completion, Session keeps counting.
+When a request finishes, the last numbers **stay visible** until the next request — Speed, Elapsed, and Session freeze at completion.
 
 ## Configuration
 

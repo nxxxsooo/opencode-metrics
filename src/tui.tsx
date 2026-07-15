@@ -38,6 +38,7 @@ const plugin: TuiPlugin = async (api: TuiPluginApi, _options: PluginOptions | un
                         barConfig={config}
                         theme={ctx.theme.current}
                         controller={controller}
+                        requestRender={() => api.renderer.requestRender()}
                     />
                 )
             },
