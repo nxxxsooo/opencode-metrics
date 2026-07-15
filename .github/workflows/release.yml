@@ -24,7 +24,9 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
-      - run: bun install --frozen-lockfile
+      # bun.lock predates the package rename and the comment-json dependency.
+      # Refresh it in the disposable release runner instead of blocking publish.
+      - run: bun install
       - run: bun test
       - run: bun run build
       - run: npm publish --access public
