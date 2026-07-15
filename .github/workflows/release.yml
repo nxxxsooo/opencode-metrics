@@ -5,25 +5,25 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun test
       - run: bun run build
-
-      # Publishes only when an NPM_TOKEN secret is configured. Without it the
-      # job still runs build + test (green), and publishing is done locally.
-      - uses: JS-DevTools/npm-publish@v3
-        if: ${{ env.NPM_TOKEN != '' }}
-        with:
-          token: ${{ secrets.NPM_TOKEN }}
-          access: public
+      - run: npm publish --access public
