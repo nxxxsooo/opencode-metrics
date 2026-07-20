@@ -20,9 +20,20 @@ English · [简体中文](./README_CN.md)
 
 <br/>
 
-## Install
+## Install from npm
 
-Add it to your OpenCode TUI plugin list and restart:
+Use OpenCode's plugin installer:
+
+```bash
+opencode plugin opencode-metrics --global
+```
+
+This installs the package from npm and adds it to your global OpenCode TUI configuration. Open a new TUI window or attach after installation; plugins are loaded at TUI startup and are not hot-reloaded. No server restart is required.
+
+<details>
+<summary>Manual configuration</summary>
+
+Add the npm package name to your OpenCode TUI plugin list:
 
 ```jsonc
 // ~/.config/opencode/tui.jsonc
@@ -31,7 +42,9 @@ Add it to your OpenCode TUI plugin list and restart:
 }
 ```
 
-That's it. The Metrics section appears in the sidebar.
+Open a new TUI window or attach. OpenCode installs and caches the npm package automatically.
+
+</details>
 
 ## Why a sidebar, not a footer bar
 
@@ -128,13 +141,13 @@ If you are an AI coding agent installing this for a user, the full procedure is:
 ```text
 GOAL: install opencode-metrics into the user's OpenCode TUI.
 
-1. Open ~/.config/opencode/tui.jsonc (create it if missing).
-2. Ensure the "plugin" array contains the string "opencode-metrics".
-   If the array does not exist, add: { "plugin": ["opencode-metrics"] }
-   Keep any existing entries (e.g. magic-context, oh-my-openagent).
-3. Do NOT add a version suffix; "opencode-metrics" resolves latest.
-4. Tell the user to open a NEW TUI window/attach — plugins load at startup,
-   they are not hot-reloaded.
+1. Run: opencode plugin opencode-metrics --global
+2. This installs the package from npm and updates the global TUI config.
+3. If the installer is unavailable, add "opencode-metrics" to the "plugin"
+   array in ~/.config/opencode/tui.jsonc without removing sibling entries.
+4. Do NOT add a version suffix; "opencode-metrics" resolves latest.
+5. Tell the user to open a NEW TUI window/attach — plugins load at TUI
+   startup and are not hot-reloaded. Do not restart the OpenCode server.
 
 VERIFY: a "Metrics" section appears in the TUI sidebar. Click its header
 badge to confirm it collapses/expands.
@@ -146,7 +159,6 @@ Never overwrite sibling top-level keys; only touch "opencode-metrics".
 NOTES:
 - It is a TUI plugin (package.json: "oc-plugin": ["tui"]); it only renders
   inside the OpenCode TUI, not in headless/CI runs.
-- It is per-session by design: under `opencode serve` each attached session
 - It defaults to per-session by design: under `opencode serve` each attached
   session shows its own metrics, never a global sum.
 - If the user asks for sub-agent aggregation, set `scope` to `tree`. Do not

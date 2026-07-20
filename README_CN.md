@@ -20,9 +20,20 @@
 
 <br/>
 
-## 安装
+## 从 npm 安装
 
-加进 OpenCode TUI 的 plugin 列表并重启：
+使用 OpenCode 的插件安装命令：
+
+```bash
+opencode plugin opencode-metrics --global
+```
+
+该命令会从 npm 安装软件包，并自动加入全局 OpenCode TUI 配置。安装后新开一个 TUI 窗口或重新 attach；插件只在 TUI 启动时加载，不会热重载，也无需重启 OpenCode 服务。
+
+<details>
+<summary>手动配置</summary>
+
+把 npm 包名加入 OpenCode TUI 的 plugin 列表：
 
 ```jsonc
 // ~/.config/opencode/tui.jsonc
@@ -31,7 +42,9 @@
 }
 ```
 
-就这样。Metrics 区块会出现在侧边栏里。
+然后新开一个 TUI 窗口或重新 attach。OpenCode 会自动安装并缓存 npm 包。
+
+</details>
 
 ## 为什么是侧边栏，而不是底部状态栏
 
@@ -128,13 +141,13 @@ bun run init:prefs
 ```text
 目标：把 opencode-metrics 装进用户的 OpenCode TUI。
 
-1. 打开 ~/.config/opencode/tui.jsonc（不存在则创建）。
-2. 确保 "plugin" 数组里有字符串 "opencode-metrics"。
-   数组不存在时加：{ "plugin": ["opencode-metrics"] }
-   保留已有条目（如 magic-context、oh-my-openagent）。
-3. 不要加版本后缀；"opencode-metrics" 解析为 latest。
-4. 让用户开一个新的 TUI 窗口 / attach —— 插件在启动时加载，
-   不会热重载。
+1. 运行：opencode plugin opencode-metrics --global
+2. 该命令会从 npm 安装软件包，并更新全局 TUI 配置。
+3. 如果安装命令不可用，则在 ~/.config/opencode/tui.jsonc 的 "plugin"
+   数组加入 "opencode-metrics"，不要删除其他插件条目。
+4. 不要加版本后缀；"opencode-metrics" 解析为 latest。
+5. 让用户开一个新的 TUI 窗口 / attach —— 插件只在 TUI 启动时加载，
+   不会热重载。不要重启 OpenCode 服务。
 
 验证：TUI 侧边栏出现 "Metrics" 区块。点击它的标题徽标确认能折叠/展开。
 
