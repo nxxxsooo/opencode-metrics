@@ -5,6 +5,7 @@ import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { MouseButtons } from "@opentui/core/testing"
 import { SidebarMetrics } from "../src/components/SidebarMetrics"
+import { StatRow } from "../src/components/StatRow"
 import { DEFAULT_CONFIG } from "../src/types"
 import { DEFAULT_PREFS } from "../src/tui-preferences"
 import type { MetricsCollector, MetricsListener } from "../src/collector"
@@ -87,7 +88,80 @@ function createTheme(): TuiThemeCurrent {
     }
 }
 
-describe("SidebarMetrics header click", () => {
+describe("SidebarMetrics", () => {
+    test("a retained row sync is inert after the renderer is destroyed", async () => {
+        // Given: an in-flight collector dispatch retained a row callback while the TUI exits.
+        let retainedSync: (() => void) | undefined
+        const setup = await testRender(
+            () => (
+                <StatRow
+                    theme={createTheme()}
+                    label="Tokens"
+                    value="↓ 123 in"
+                    registerSync={(sync) => {
+                        retainedSync = sync
+                        return () => {}
+                    }}
+                />
+            ),
+            { width: 40, height: 4 },
+        )
+
+        await setup.flush()
+
+        // When: OpenTUI has released the row before the retained dispatch finishes.
+        setup.renderer.destroy()
+
+        // Then: the late callback must not write to the destroyed TextBuffer.
+        expect(() => retainedSync?.()).not.toThrow()
+    })
+
+    test("a queued sidebar refresh is cancelled when the renderer is destroyed", async () => {
+        // Given: a collector update schedules a follow-up microtask render.
+        let retainedListener: MetricsListener | null = null
+        let renderRequests = 0
+        const notifyingCollector: MetricsCollector = {
+            ...collector,
+            subscribe: (next: MetricsListener) => {
+                retainedListener = next
+                return () => {}
+            },
+        }
+        const prefs = structuredClone(DEFAULT_PREFS)
+        const controller: MetricsSidebarController = {
+            prefs: () => prefs,
+            collapsed: () => false,
+            toggleCollapsed: () => {},
+            subscribe: () => () => {},
+        }
+        const setup = await testRender(
+            () => (
+                <SidebarMetrics
+                    sessionID="ses_test"
+                    collector={notifyingCollector}
+                    refreshIntervalMs={10_000}
+                    barConfig={DEFAULT_CONFIG}
+                    theme={createTheme()}
+                    controller={controller}
+                    requestRender={() => {
+                        renderRequests += 1
+                    }}
+                />
+            ),
+            { width: 40, height: 12 },
+        )
+
+        await setup.flush()
+        retainedListener?.()
+
+        // When: the TUI exits before the queued microtask runs.
+        setup.renderer.destroy()
+        await Promise.resolve()
+
+        // Then: no render request escapes component cleanup.
+        expect(renderRequests).toBe(0)
+    })
+
     test("collector updates rerender metric rows", async () => {
         // Given: the sidebar starts idle before OpenCode has delivered token metrics.
         let listener: MetricsListener | null = null

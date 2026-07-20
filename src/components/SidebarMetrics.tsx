@@ -25,32 +25,48 @@ interface SidebarMetricsProps {
 }
 
 export function SidebarMetrics(props: SidebarMetricsProps) {
+    let disposed = false
+    let refreshQueued = false
+    let interval: ReturnType<typeof setInterval> | undefined
+    let unsub = () => {}
+    let unsubController = () => {}
     const rowSyncs = new Set<() => void>()
     const registerRowSync = (sync: () => void) => {
+        if (disposed) return () => {}
         rowSyncs.add(sync)
         return () => rowSyncs.delete(sync)
     }
     const syncRows = () => {
+        if (disposed) return
         for (const sync of rowSyncs) sync()
     }
     const [tick, setTick] = createSignal(0)
     const bump = () => {
+        if (disposed) return
         setTick((t) => t + 1)
         syncRows()
+        if (refreshQueued) return
+        refreshQueued = true
         queueMicrotask(() => {
+            refreshQueued = false
+            if (disposed) return
             syncRows()
             props.requestRender?.()
         })
     }
 
-    const interval = setInterval(bump, props.refreshIntervalMs)
-    onCleanup(() => clearInterval(interval))
+    onCleanup(() => {
+        disposed = true
+        refreshQueued = false
+        rowSyncs.clear()
+        if (interval !== undefined) clearInterval(interval)
+        unsub()
+        unsubController()
+    })
 
-    const unsub = props.collector.subscribe(bump)
-    onCleanup(unsub)
-
-    const unsubController = props.controller.subscribe(bump)
-    onCleanup(unsubController)
+    interval = setInterval(bump, props.refreshIntervalMs)
+    unsub = props.collector.subscribe(bump)
+    unsubController = props.controller.subscribe(bump)
 
     const sectionEnabled = createMemo(() => {
         tick()

@@ -1,6 +1,6 @@
 {
   "name": "opencode-metrics",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "OpenCode TUI sidebar plugin for real-time LLM token metrics",
   "repository": {
     "type": "git",

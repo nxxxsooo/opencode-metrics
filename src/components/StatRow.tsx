@@ -18,6 +18,7 @@ interface StatRowProps {
 }
 
 export function StatRow(props: StatRowProps) {
+    let disposed = false
     let rowNode: BoxRenderable | undefined
     let labelNode: TextRenderable | undefined
     let valueNode: TextRenderable | undefined
@@ -33,10 +34,11 @@ export function StatRow(props: StatRowProps) {
     const visible = () => typeof props.visible === "function" ? props.visible() : props.visible !== false
     const content = () => `${props.icon ? `${props.icon} ` : ""}${value()}`
     const syncContent = () => {
+        if (disposed) return
         const isVisible = visible()
-        if (rowNode) rowNode.visible = isVisible
-        if (labelNode) labelNode.content = isVisible ? props.label : ""
-        if (!valueNode) return
+        if (rowNode && !rowNode.isDestroyed) rowNode.visible = isVisible
+        if (labelNode && !labelNode.isDestroyed) labelNode.content = isVisible ? props.label : ""
+        if (!valueNode || valueNode.isDestroyed) return
         valueNode.content = isVisible ? content() : ""
         valueNode.requestRender()
     }
@@ -53,7 +55,14 @@ export function StatRow(props: StatRowProps) {
         valueNode = node
         syncContent()
     }
-    onCleanup(() => unregisterSync?.())
+    onCleanup(() => {
+        disposed = true
+        unregisterSync?.()
+        unregisterSync = undefined
+        rowNode = undefined
+        labelNode = undefined
+        valueNode = undefined
+    })
 
     return (
         <box ref={attachRowNode} width="100%" flexDirection="row" justifyContent="space-between" visible={visible()}>
