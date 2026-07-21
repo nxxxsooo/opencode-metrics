@@ -217,6 +217,7 @@ describe("SidebarMetrics", () => {
                 firstTokenTime: null,
                 completeTime: null,
                 ttft: null,
+                liveTps: 32.4,
                 isStreaming: false,
                 isComplete: true,
             }
@@ -224,6 +225,7 @@ describe("SidebarMetrics", () => {
 
             const frame = await setup.waitForFrame((value) => value.includes("↓ 123 in") && value.includes("↑ 4 out"))
             expect(frame).not.toContain("No active request")
+            expect(frame).toContain("32.4 t/s")
         } finally {
             setup.renderer.destroy()
         }
@@ -285,6 +287,7 @@ describe("SidebarMetrics", () => {
                 firstTokenTime: null,
                 completeTime: null,
                 ttft: null,
+                liveTps: null,
                 isStreaming: false,
                 isComplete: true,
             }
@@ -294,6 +297,7 @@ describe("SidebarMetrics", () => {
             expect(frame).not.toContain("Tokens")
             expect(frame).not.toContain("Elapsed")
             expect(frame).not.toContain("TTFT")
+            expect(frame).toContain("—")
         } finally {
             setup.renderer.destroy()
         }

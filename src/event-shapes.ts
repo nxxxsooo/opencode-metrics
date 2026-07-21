@@ -33,6 +33,7 @@ export interface AssistantMessageEvent {
 
 export interface UserMessageEvent {
   readonly messageID: string
+  readonly createdTime: number | null
 }
 
 export interface AssistantStepStartedEvent {
@@ -159,7 +160,8 @@ export function parseAssistantMessage(value: unknown): AssistantMessageEvent | n
 
 export function parseUserMessage(value: unknown): UserMessageEvent | null {
   if (!isRecord(value) || value.role !== "user") return null
-  return { messageID: stringOrEmpty(value.id) }
+  const time = isRecord(value.time) ? value.time : null
+  return { messageID: stringOrEmpty(value.id), createdTime: timestampOrNull(time?.created) }
 }
 
 export function parseAssistantStepStarted(value: unknown, fallbackMessageID = ""): AssistantStepStartedEvent | null {

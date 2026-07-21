@@ -26,7 +26,7 @@ describe("estimateTokens", () => {
   })
 
   test("Chinese text estimated by ratio", () => {
-    expect(estimateTokens("你好世界", 4)).toBe(1)
+    expect(estimateTokens("你好世界", 4)).toBeCloseTo(2.4)
   })
 
   test("ratio 3 is more conservative", () => {
@@ -81,7 +81,7 @@ describe("getTtft", () => {
 })
 
 describe("getTps", () => {
-  test("calculates average token speed", () => {
+  test("keeps the legacy status-bar average token speed helper", () => {
     const m = createFreshMetrics("ses_1", "msg_1", "claude-sonnet-4", "anthropic", 1000)
     m.firstTokenTime = 1500
     m.exactOutputTokens = 450

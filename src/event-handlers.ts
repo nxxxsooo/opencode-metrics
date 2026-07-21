@@ -1,4 +1,4 @@
-import { applyAssistantDelta, applyAssistantProgress } from "./assistant-progress"
+import { applyAssistantDelta, applyAssistantPartDelta, applyAssistantProgress } from "./assistant-progress"
 import { createFreshMetrics, estimateTokens } from "./metrics"
 import {
   parseAssistantMessage,
@@ -13,6 +13,8 @@ import { applyAssistantTokens, applySessionModel, hasPositiveAssistantTokens, me
 import { completeRequest, currentRequest } from "./request-state"
 import { eventAggregateID, eventID, eventProperties, eventProperty, statusType, stringEventProperty } from "./event-bus"
 import type { EventHandlerContext } from "./collector-state"
+import { clearLiveSpeed, resetLiveSpeed } from "./live-speed"
+import { ensureTurn, retireRequestIntoTurn, startTurn } from "./turn-state"
 
 export function registerEventHandlers(ctx: EventHandlerContext): Array<() => void> {
   const { api, config, log, state, actions } = ctx
@@ -30,7 +32,27 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
 
   function on(type: string, handler: (event: unknown) => void): void {
     for (const eventType of [type, `${type}.1`, `${type}.2`]) {
-      disposers.push(api.event.on(eventType, handler))
+      disposers.push(api.event.on(eventType, (event) => {
+        const id = eventID(event)
+        const properties = eventProperties(event)
+        let serialized = ""
+        try {
+          serialized = JSON.stringify(properties)
+        } catch {
+          serialized = ""
+        }
+        const key = id && eventAggregateID(event) ? `${type}:${id}:${serialized}` : ""
+        if (key && state.seenEventKeys.has(key)) return
+        if (key) {
+          state.seenEventKeys.add(key)
+          state.seenEventOrder.push(key)
+          if (state.seenEventOrder.length > 4096) {
+            const oldest = state.seenEventOrder.shift()
+            if (oldest) state.seenEventKeys.delete(oldest)
+          }
+        }
+        handler(event)
+      }))
     }
   }
 
@@ -46,6 +68,12 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
 
   function recordEventAlias(event: unknown, sessionID: string): void {
     addAlias(eventAggregateID(event), sessionID)
+  }
+
+  function clearPartEstimates(sessionID: string): void {
+    for (const key of state.partTokenEstimates.keys()) {
+      if (key.startsWith(`${sessionID}:`)) state.partTokenEstimates.delete(key)
+    }
   }
 
   // ── session.created ──
@@ -69,17 +97,21 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
     log(`session.status: ${sessionID} -> ${type}`)
 
     if (type === "busy") {
-      actions.startSessionTiming(sessionID, performance.now())
+      const now = performance.now()
+      actions.startSessionTiming(sessionID, now)
       actions.clearHoldTimer(sessionID)
+      const existingTurn = state.turns.get(sessionID)
+      if (!existingTurn || existingTurn.isComplete) startTurn(state.turns, sessionID, now)
       const existing = state.requests.get(sessionID)
       if (existing && existing.isComplete) {
         const prev = existing
-        state.requests.set(sessionID, createFreshMetrics(sessionID, "", prev.modelID, prev.providerID, performance.now()))
+        state.requests.set(sessionID, createFreshMetrics(sessionID, "", prev.modelID, prev.providerID, now))
+        clearLiveSpeed(state.liveSpeeds, sessionID)
         state.lastRequestSessionID = sessionID
-        log(`new model request after tool call: session=${sessionID}`)
+        log(`new turn after idle: session=${sessionID}`)
         actions.notify()
       } else if (!existing) {
-        state.requests.set(sessionID, createFreshMetrics(sessionID, "", "", "", performance.now()))
+        state.requests.set(sessionID, createFreshMetrics(sessionID, "", "", "", now))
         state.lastRequestSessionID = sessionID
         actions.notify()
       }
@@ -103,27 +135,15 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
     const messageID = stringEventProperty(event, "messageID")
     const delta = stringEventProperty(event, "delta")
     const field = stringEventProperty(event, "field")
+    const partID = stringEventProperty(event, "partID") || `${messageID}:stream`
     if (sessionID.length === 0 || messageID.length === 0) return
     recordEventAlias(event, sessionID)
     if (field !== "text") return
     actions.startSessionTiming(sessionID, performance.now())
 
-    let current = state.requests.get(sessionID)
-    if (!current) {
-      current = createFreshMetrics(sessionID, messageID, "", "", performance.now())
-      applySessionModel(current, state.sessionModels.get(sessionID))
-      state.requests.set(sessionID, current)
-    }
-    state.lastRequestSessionID = sessionID
-
-    if (current.firstTokenTime === null) {
-      current.firstTokenTime = performance.now()
-    }
-
-    current.estimatedOutputTokens += estimateTokens(delta, config.estimationRatio)
-    current.lastDeltaTime = performance.now()
-    current.isStreaming = true
-    actions.notify()
+    const now = performance.now()
+    ensureTurn(state.turns, sessionID, now)
+    applyAssistantPartDelta(ctx, sessionID, messageID, partID, delta, now)
   })
 
   on("session.next.step.started", (event) => {
@@ -132,11 +152,15 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
     recordEventAlias(event, step.sessionID)
     const now = performance.now()
     actions.startSessionTiming(step.sessionID, now)
+    const existingTurn = state.turns.get(step.sessionID)
+    if (!existingTurn || existingTurn.isComplete) startTurn(state.turns, step.sessionID, now)
     state.assistantMessageIds.set(step.sessionID, step.messageID)
+    clearPartEstimates(step.sessionID)
     if (step.modelID || step.providerID) {
       state.sessionModels.set(step.sessionID, { modelID: step.modelID, providerID: step.providerID })
     }
     const current = currentRequest({ state, actions, sessionID: step.sessionID, messageID: step.messageID, now })
+    resetLiveSpeed(state.liveSpeeds, step.sessionID, step.messageID)
     applySessionModel(current, state.sessionModels.get(step.sessionID))
     actions.notify()
   })
@@ -153,7 +177,23 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
     recordEventAlias(event, step.sessionID)
     const now = performance.now()
     actions.startSessionTiming(step.sessionID, now)
-    const current = currentRequest({ state, actions, sessionID: step.sessionID, messageID: step.messageID, now })
+    const turn = ensureTurn(state.turns, step.sessionID, now)
+    const existing = state.requests.get(step.sessionID)
+    const isCurrent = existing?.messageID === step.messageID
+    if (turn.finalizedSteps.get(step.messageID)?.exact) {
+      log(`duplicate finalized step ignored: session=${step.sessionID} message=${step.messageID}`)
+      return
+    }
+    const shouldStore = !existing
+      || existing.messageID.length === 0
+      || Boolean(state.userMessageIds.get(step.sessionID)?.has(existing.messageID))
+    const current = isCurrent
+      ? existing
+      : createFreshMetrics(step.sessionID, step.messageID, existing?.modelID ?? "", existing?.providerID ?? "", now)
+    if (shouldStore) {
+      state.requests.set(step.sessionID, current)
+      state.lastRequestSessionID = step.sessionID
+    }
     if (applyAssistantTokens(current, step.tokens)) {
       log(`exact: in=${step.tokens.input} out=${step.tokens.output} cr=${step.tokens.cacheRead} cw=${step.tokens.cacheWrite}`)
     } else {
@@ -161,6 +201,10 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
     }
     current.lastDeltaTime = now
     current.isStreaming = false
+    retireRequestIntoTurn(turn, current, isCurrent || shouldStore)
+    if (state.liveSpeeds.get(step.sessionID)?.messageID === step.messageID) {
+      clearLiveSpeed(state.liveSpeeds, step.sessionID)
+    }
     actions.notify()
   })
 
@@ -204,21 +248,32 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
 
       const now = performance.now()
       const tokens = assistant.tokens
-      const shouldUseAssistantMessage = assistant.messageID.length > 0
-        && (hasPositiveAssistantTokens(tokens) || state.requests.get(sessionID)?.messageID === assistant.messageID)
+      const existing = state.requests.get(sessionID)
+      const turn = ensureTurn(state.turns, sessionID, now)
+      const hasPositive = hasPositiveAssistantTokens(tokens)
+      const isCurrent = existing?.messageID === assistant.messageID
+      const shouldUseAssistantMessage = assistant.messageID.length > 0 && (hasPositive || isCurrent)
       const current = shouldUseAssistantMessage
-        ? currentRequest({ state, actions, sessionID, messageID: assistant.messageID, now })
-        : state.requests.get(sessionID)
+        ? isCurrent
+          ? existing
+          : turn.finalizedSteps.has(assistant.messageID)
+            ? createFreshMetrics(sessionID, assistant.messageID, assistant.modelID, assistant.providerID, now)
+            : currentRequest({ state, actions, sessionID, messageID: assistant.messageID, now })
+        : existing
       if (current) {
         if (!current.isComplete) actions.startSessionTiming(sessionID, now)
         if (tokens) {
           if (applyAssistantTokens(current, tokens)) {
             log(`exact: in=${tokens.input} out=${tokens.output} cr=${tokens.cacheRead} cw=${tokens.cacheWrite}`)
+            retireRequestIntoTurn(turn, current, isCurrent || state.requests.get(sessionID) === current)
           } else {
             log(`assistant tokens all zero, skipping overwrite`)
           }
         }
         applySessionModel(current, state.sessionModels.get(sessionID))
+        if (assistant.completed && state.liveSpeeds.get(sessionID)?.messageID === assistant.messageID) {
+          clearLiveSpeed(state.liveSpeeds, sessionID)
+        }
         actions.notify()
       }
     }
@@ -233,7 +288,14 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
       if (userMsgID && state.userMessageIds.get(sessionID)?.has(userMsgID)) {
         return
       }
-      const fresh = createFreshMetrics(sessionID, userMsgID, "", "", performance.now())
+      const now = performance.now()
+      const previous = state.requests.get(sessionID)
+      const previousTurn = state.turns.get(sessionID)
+      if (previous && previousTurn) retireRequestIntoTurn(previousTurn, previous)
+      startTurn(state.turns, sessionID, now)
+      clearLiveSpeed(state.liveSpeeds, sessionID)
+      clearPartEstimates(sessionID)
+      const fresh = createFreshMetrics(sessionID, userMsgID, "", "", now)
       actions.startSessionTiming(sessionID, fresh.requestStartTime)
       if (userMsgID) {
         let msgIds = state.userMessageIds.get(sessionID)
@@ -258,6 +320,8 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
     state.sessionTree.deleteSession(sessionID)
     state.sessionModels.delete(sessionID)
     state.sessionTimings.delete(sessionID)
+    state.turns.delete(sessionID)
+    state.liveSpeeds.delete(sessionID)
     state.userMessageIds.delete(sessionID)
     state.assistantMessageIds.delete(sessionID)
     state.sessionAliases.delete(sessionID)
@@ -266,9 +330,6 @@ export function registerEventHandlers(ctx: EventHandlerContext): Array<() => voi
     }
     for (const key of state.partTokenEstimates.keys()) {
       if (key.startsWith(`${sessionID}:`)) state.partTokenEstimates.delete(key)
-    }
-    for (const key of state.partTexts.keys()) {
-      if (key.startsWith(`${sessionID}:`)) state.partTexts.delete(key)
     }
     actions.clearHoldTimer(sessionID)
     if (state.requests.has(sessionID)) {

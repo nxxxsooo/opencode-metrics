@@ -1,9 +1,14 @@
 import type { RequestMetrics } from "./types"
 import { createFreshMetrics } from "./metrics"
 import { applySessionModel } from "./request-updates"
+import { clearLiveSpeed, resetLiveSpeed } from "./live-speed"
+import { completeTurn, ensureTurn, retireRequestIntoTurn, startTurn } from "./turn-state"
+import type { LiveSpeedState, TurnMetrics } from "./types"
 
 export interface RequestState {
   readonly requests: Map<string, RequestMetrics>
+  readonly turns: Map<string, TurnMetrics>
+  readonly liveSpeeds: Map<string, LiveSpeedState>
   readonly sessionModels: Map<string, { readonly modelID: string; readonly providerID: string }>
   lastRequestSessionID: string | null
 }
@@ -27,6 +32,12 @@ export function currentRequest(input: CurrentRequestInput): RequestMetrics {
   const existing = input.state.requests.get(input.sessionID)
   const isDifferentMessage = existing?.messageID.length ? existing.messageID !== input.messageID : false
   if (!existing || isDifferentMessage) {
+    const priorTurn = input.state.turns.get(input.sessionID)
+    const startsAfterCompletedTurn = Boolean(priorTurn?.isComplete && isDifferentMessage)
+    const turn = startsAfterCompletedTurn
+      ? startTurn(input.state.turns, input.sessionID, input.now)
+      : ensureTurn(input.state.turns, input.sessionID, existing?.requestStartTime ?? input.now)
+    if (existing && isDifferentMessage && !startsAfterCompletedTurn) retireRequestIntoTurn(turn, existing)
     const current = createFreshMetrics(
       input.sessionID,
       input.messageID,
@@ -36,6 +47,7 @@ export function currentRequest(input: CurrentRequestInput): RequestMetrics {
     )
     applySessionModel(current, input.state.sessionModels.get(input.sessionID))
     input.state.requests.set(input.sessionID, current)
+    resetLiveSpeed(input.state.liveSpeeds, input.sessionID, input.messageID)
     input.state.lastRequestSessionID = input.sessionID
     input.actions.clearHoldTimer(input.sessionID)
     return current
@@ -59,6 +71,10 @@ export interface CompleteRequestInput {
 export function completeRequest(input: CompleteRequestInput): void {
   const current = input.state.requests.get(input.sessionID)
   input.actions.stopSessionTiming(input.sessionID, input.now)
+  const turn = input.state.turns.get(input.sessionID)
+  if (current && turn) retireRequestIntoTurn(turn, current)
+  if (turn) completeTurn(turn, input.now)
+  clearLiveSpeed(input.state.liveSpeeds, input.sessionID)
   if (!current) return
   current.isStreaming = false
   current.isComplete = true

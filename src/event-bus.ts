@@ -17,6 +17,7 @@ function syncEvent(event: unknown): Record<string, unknown> | null {
 export function eventProperties(event: unknown): unknown {
   if (!isRecord(event)) return null
   if (Object.prototype.hasOwnProperty.call(event, "properties")) return event.properties
+  if (Object.prototype.hasOwnProperty.call(event, "data")) return event.data
   const sync = syncEvent(event)
   if (sync && Object.prototype.hasOwnProperty.call(sync, "data")) return sync.data
   return null
@@ -31,7 +32,9 @@ export function eventID(event: unknown): string {
 
 export function eventAggregateID(event: unknown): string {
   const sync = syncEvent(event)
-  return sync && typeof sync.aggregateID === "string" ? sync.aggregateID : ""
+  if (sync && typeof sync.aggregateID === "string") return sync.aggregateID
+  if (!isRecord(event) || !isRecord(event.durable)) return ""
+  return typeof event.durable.aggregateID === "string" ? event.durable.aggregateID : ""
 }
 
 export function eventProperty(event: unknown, key: string): unknown {

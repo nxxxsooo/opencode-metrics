@@ -1,6 +1,6 @@
 {
   "name": "opencode-metrics",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "description": "OpenCode TUI sidebar plugin for real-time LLM token metrics",
   "repository": {
     "type": "git",
@@ -36,6 +36,8 @@
     "src/event-handlers.ts",
     "src/logger.ts",
     "src/metrics.ts",
+    "src/live-speed.ts",
+    "src/turn-state.ts",
     "src/request-state.ts",
     "src/request-updates.ts",
     "src/session-hydration.ts",
@@ -57,13 +59,15 @@
     "prepublishOnly": "tsup"
   },
   "devDependencies": {
+    "@opencode-ai/plugin": "1.18.4",
+    "@opencode-ai/sdk": "1.18.4",
     "@types/bun": "latest",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@opentui/core": "0.4.3",
-    "@opentui/solid": "0.4.3",
+    "@opentui/core": "0.4.5",
+    "@opentui/solid": "0.4.5",
     "comment-json": "^5.0.0",
     "solid-js": "^1.9.12"
   },
