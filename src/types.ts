@@ -29,6 +29,36 @@ export interface RequestMetrics {
   isComplete: boolean                   // Whether request is complete (idle)
 }
 
+export interface FinalizedStepUsage {
+  outputTokens: number
+  exact: boolean
+}
+
+export interface TurnMetrics {
+  sessionID: string
+  turnStartTime: number
+  completeTime: number | null
+  finalizedOutputTokens: number
+  finalizedSteps: Map<string, FinalizedStepUsage>
+  stickyContextTokens: number
+  stickyContextUpdatedAt: number
+  hasStickyContextTokens: boolean
+  stickyCacheReadTokens: number
+  hasStickyCacheReadTokens: boolean
+  isComplete: boolean
+}
+
+export interface LiveSpeedSample {
+  at: number
+  cumulativeTokens: number
+}
+
+export interface LiveSpeedState {
+  messageID: string
+  cumulativeTokens: number
+  samples: LiveSpeedSample[]
+}
+
 export type MetricsScope = "current" | "tree"
 
 export type CacheReadCompleteness = "exact" | "partial" | "unknown"
@@ -44,6 +74,7 @@ export interface MetricsAggregate {
   firstTokenTime: number | null
   completeTime: number | null
   ttft: number | null
+  liveTps: number | null
   isStreaming: boolean
   isComplete: boolean
 }

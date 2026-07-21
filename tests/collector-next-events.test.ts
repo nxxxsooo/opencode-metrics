@@ -38,10 +38,47 @@ function createEventHarness() {
       }
       for (const handler of handlers.get(type) ?? []) handler(event)
     },
+    emitData(type: string, data: Record<string, unknown>, id = type, aggregateID = typeof data.sessionID === "string" ? data.sessionID : "") {
+      const event = {
+        id,
+        type,
+        durable: { aggregateID, seq: 1, version: 1 },
+        data,
+      }
+      for (const handler of handlers.get(type) ?? []) handler(event)
+    },
   }
 }
 
 describe("collector session.next events", () => {
+  test("reads the direct V2 event data and durable envelope", () => {
+    const harness = createEventHarness()
+    const collector = createCollector(harness.api, DEFAULT_CONFIG, () => {})
+
+    harness.emitData("session.next.step.started", {
+      sessionID: "ses_typed",
+      assistantMessageID: "msg_typed",
+      model: { id: "gpt-5.6", providerID: "openai" },
+    }, "typed_started")
+    harness.emitData("session.next.step.ended", {
+      sessionID: "ses_typed",
+      assistantMessageID: "msg_typed",
+      tokens: {
+        input: 40,
+        output: 8,
+        reasoning: 2,
+        cache: { read: 60, write: 0 },
+      },
+    }, "typed_ended")
+
+    const aggregate = collector.getAggregate("ses_typed", "current", performance.now())
+    expect(collector.getCurrent("ses_typed")?.modelID).toBe("gpt-5.6")
+    expect(aggregate?.inputTokens).toBe(100)
+    expect(aggregate?.outputTokens).toBe(10)
+
+    collector.dispose()
+  })
+
   test("applies exact tokens from a completed assistant step", () => {
     // Given: the OpenCode 1.17 session.next stream for one assistant step.
     const harness = createEventHarness()
@@ -106,7 +143,7 @@ describe("collector session.next events", () => {
     const secondAggregate = collector.getAggregate("ses_next", "current", performance.now())
     expect(collector.getCurrent("ses_next")?.messageID).toBe("msg_assistant_2")
     expect(secondAggregate?.inputTokens).toBe(10)
-    expect(secondAggregate?.outputTokens).toBe(23)
+    expect(secondAggregate?.outputTokens).toBe(435)
 
     collector.dispose()
   })
@@ -530,7 +567,7 @@ describe("collector session.next events", () => {
 
     const aggregate = collector.getAggregate("ses_dedupe", "current", performance.now() + 1000)
 
-    expect(aggregate?.outputTokens).toBe(3)
+    expect(aggregate?.outputTokens).toBeCloseTo(2.75)
     expect(aggregate?.isStreaming).toBe(true)
 
     collector.dispose()
@@ -631,7 +668,7 @@ describe("collector session.next events", () => {
     const estimated = collector.getAggregate("ses_zero_assistant", "current", performance.now())
 
     expect(collector.getCurrent("ses_zero_assistant")?.messageID).toBe("msg_user_zero_assistant")
-    expect(estimated?.inputTokens).toBe(11)
+    expect(estimated?.inputTokens).toBeCloseTo(10.75)
     expect(estimated?.outputTokens).toBe(0)
 
     harness.emitSync("session.next.step.ended.1", {
@@ -703,6 +740,138 @@ describe("collector session.next events", () => {
     expect(afterDelete?.outputTokens).toBeGreaterThan(beforeDelete?.outputTokens ?? 0)
     expect(afterDelete?.outputTokens).toBeLessThan((beforeDelete?.outputTokens ?? 0) * 2)
 
+    collector.dispose()
+  })
+
+  test("keeps finalized steps cumulative, sticky context stable, and resets on a new user turn", () => {
+    const harness = createEventHarness()
+    const collector = createCollector(harness.api, DEFAULT_CONFIG, () => {})
+
+    harness.emit("message.updated", {
+      sessionID: "ses_turn",
+      info: { id: "msg_user_1", role: "user", time: { created: Date.now() } },
+    }, "user_1")
+    harness.emit("session.next.step.ended", {
+      sessionID: "ses_turn",
+      assistantMessageID: "msg_step_1",
+      tokens: { input: 100, output: 10, reasoning: 2, cache: { read: 900, write: 0 } },
+    }, "step_1")
+    harness.emit("session.next.step.started", {
+      sessionID: "ses_turn",
+      assistantMessageID: "msg_step_2",
+    }, "step_2_start")
+
+    const inFlight = collector.getAggregate("ses_turn", "current", performance.now())
+    expect(inFlight?.inputTokens).toBe(1000)
+    expect(inFlight?.outputTokens).toBe(12)
+
+    harness.emit("session.next.step.ended", {
+      sessionID: "ses_turn",
+      assistantMessageID: "msg_step_2",
+      tokens: { input: 150, output: 20, reasoning: 3, cache: { read: 950, write: 0 } },
+    }, "step_2_end")
+    expect(collector.getAggregate("ses_turn", "current", performance.now())?.outputTokens).toBe(35)
+
+    harness.emit("message.updated", {
+      sessionID: "ses_turn",
+      info: { id: "msg_user_2", role: "user", time: { created: Date.now() } },
+    }, "user_2")
+    expect(collector.getAggregate("ses_turn", "current", performance.now())?.outputTokens).toBe(0)
+
+    collector.dispose()
+  })
+
+  test("finalizes each exact step once across event families and corrects an idle estimate", () => {
+    const harness = createEventHarness()
+    const collector = createCollector(harness.api, DEFAULT_CONFIG, () => {})
+
+    harness.emit("session.next.step.started", {
+      sessionID: "ses_idempotent",
+      assistantMessageID: "msg_same",
+    }, "same_start")
+    harness.emit("session.next.text.delta", {
+      sessionID: "ses_idempotent",
+      assistantMessageID: "msg_same",
+      textID: "txt_same",
+      delta: "abcdefgh",
+    }, "same_delta")
+    harness.emit("session.idle", { sessionID: "ses_idempotent" }, "same_idle")
+    expect(collector.getAggregate("ses_idempotent", "current", performance.now())?.outputTokens).toBe(2)
+
+    const tokens = { input: 50, output: 5, reasoning: 1, cache: { read: 10, write: 0 } }
+    harness.emit("session.next.step.ended", {
+      sessionID: "ses_idempotent",
+      assistantMessageID: "msg_same",
+      tokens,
+    }, "same_end")
+    harness.emitSync("session.next.step.ended.1", {
+      sessionID: "ses_idempotent",
+      assistantMessageID: "msg_same",
+      tokens,
+    }, "same_end", "ses_idempotent")
+    harness.emit("message.updated", {
+      sessionID: "ses_idempotent",
+      info: {
+        id: "msg_same",
+        role: "assistant",
+        time: { created: Date.now() - 100, completed: Date.now() },
+        tokens,
+      },
+    }, "same_message")
+
+    const aggregate = collector.getAggregate("ses_idempotent", "current", performance.now())
+    expect(aggregate?.outputTokens).toBe(6)
+    expect(aggregate?.liveTps).toBeNull()
+
+    collector.dispose()
+  })
+
+  test("deduplicates V1 delta fragments against the matching part snapshot", () => {
+    const harness = createEventHarness()
+    const collector = createCollector(harness.api, DEFAULT_CONFIG, () => {})
+
+    harness.emit("message.part.delta", {
+      sessionID: "ses_v1_dedupe",
+      messageID: "msg_v1_dedupe",
+      partID: "prt_v1_dedupe",
+      field: "text",
+      delta: "abcdefgh",
+    }, "v1_delta")
+    harness.emit("message.part.updated", {
+      sessionID: "ses_v1_dedupe",
+      part: {
+        id: "prt_v1_dedupe",
+        messageID: "msg_v1_dedupe",
+        type: "text",
+        text: "abcdefgh",
+      },
+    }, "v1_snapshot")
+
+    expect(collector.getAggregate("ses_v1_dedupe", "current", performance.now())?.outputTokens).toBe(2)
+    collector.dispose()
+  })
+
+  test("does not recount a part snapshot after it temporarily shrinks", () => {
+    const harness = createEventHarness()
+    const collector = createCollector(harness.api, DEFAULT_CONFIG, () => {})
+    const base = {
+      sessionID: "ses_part_rewrite",
+      part: {
+        id: "prt_part_rewrite",
+        messageID: "msg_part_rewrite",
+        type: "text",
+        text: "abcdefgh",
+      },
+    }
+
+    harness.emit("message.part.updated", base, "part_full")
+    harness.emit("message.part.updated", {
+      ...base,
+      part: { ...base.part, text: "abcd" },
+    }, "part_short")
+    harness.emit("message.part.updated", base, "part_full_again")
+
+    expect(collector.getAggregate("ses_part_rewrite", "current", performance.now())?.outputTokens).toBe(2)
     collector.dispose()
   })
 

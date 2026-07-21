@@ -8,7 +8,13 @@ import type { BarConfig, CacheReadCompleteness, MetricsAggregate, RequestMetrics
  */
 export function estimateTokens(text: string, ratio: number): number {
   if (!text) return 0
-  return Math.max(0, Math.round(text.length / ratio))
+  const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 4
+  let tokens = 0
+  for (const char of text) {
+    const isCjk = /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(char)
+    tokens += isCjk ? 0.6 : 1 / safeRatio
+  }
+  return Math.max(0, tokens)
 }
 
 /**
@@ -89,6 +95,7 @@ export function aggregateRequestMetrics(
     firstTokenTime,
     completeTime: completeTime ?? (isComplete ? now : null),
     ttft,
+    liveTps: null,
     isStreaming,
     isComplete,
   }

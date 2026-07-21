@@ -208,7 +208,7 @@ describe("collector fresh-start hydration", () => {
     collector.dispose()
   })
 
-  test("replaces stale completed request when hydration sees a newer assistant", () => {
+  test("does not reparse a successfully hydrated session on every getter", () => {
     const wallNow = Date.now()
     let messages: readonly unknown[] = [
       {
@@ -229,12 +229,14 @@ describe("collector fresh-start hydration", () => {
       },
     ]
     const eventHarness = createEventHarness()
+    let messageCalls = 0
     const harness = {
       ...eventHarness.api,
       emit: eventHarness.emit,
       state: {
         session: {
           messages() {
+            messageCalls += 1
             return messages
           },
           status() {
@@ -268,10 +270,11 @@ describe("collector fresh-start hydration", () => {
 
     const nextAggregate = collector.getAggregate("ses_replace", "current", performance.now())
 
-    expect(collector.getCurrent("ses_replace")?.messageID).toBe("msg_new")
-    expect(nextAggregate?.inputTokens).toBe(30)
-    expect(nextAggregate?.outputTokens).toBe(9)
-    expect(nextAggregate?.requestStartTime).not.toBe(oldAggregate?.requestStartTime)
+    expect(collector.getCurrent("ses_replace")?.messageID).toBe("msg_old")
+    expect(nextAggregate?.inputTokens).toBe(10)
+    expect(nextAggregate?.outputTokens).toBe(5)
+    expect(nextAggregate?.requestStartTime).toBe(oldAggregate?.requestStartTime)
+    expect(messageCalls).toBe(1)
 
     collector.dispose()
   })
@@ -313,6 +316,69 @@ describe("collector fresh-start hydration", () => {
     expect(collector.getCurrent("ses_zero_state")?.messageID).toBe("msg_exact_state")
     expect(aggregate?.inputTokens).toBe(50)
     expect(aggregate?.outputTokens).toBe(7)
+
+    collector.dispose()
+  })
+
+  test("recursively discovers and hydrates descendants that existed before attach", async () => {
+    const wallNow = Date.now()
+    const messages = new Map<string, readonly unknown[]>([
+      ["ses_tree_root", [
+        { id: "usr_root", role: "user", time: { created: wallNow - 5000 } },
+        {
+          id: "asst_root",
+          role: "assistant",
+          time: { created: wallNow - 4500, completed: wallNow - 4000 },
+          tokens: { input: 100, output: 10, reasoning: 2, cache: { read: 20, write: 0 } },
+        },
+      ]],
+      ["ses_tree_child", [
+        { id: "usr_child", role: "user", time: { created: wallNow - 3500 } },
+        {
+          id: "asst_child",
+          role: "assistant",
+          time: { created: wallNow - 3000, completed: wallNow - 2500 },
+          tokens: { input: 50, output: 7, reasoning: 3, cache: { read: 5, write: 0 } },
+        },
+      ]],
+    ])
+    const eventHarness = createEventHarness()
+    const childCalls: string[] = []
+    const harness = {
+      ...eventHarness.api,
+      state: {
+        session: {
+          messages(sessionID: string) {
+            return messages.get(sessionID) ?? []
+          },
+          status() {
+            return { type: "idle" }
+          },
+        },
+      },
+      client: {
+        session: {
+          async children({ sessionID }: { sessionID: string }) {
+            childCalls.push(sessionID)
+            return {
+              data: sessionID === "ses_tree_root"
+                ? [{ id: "ses_tree_child", parentID: "ses_tree_root" }]
+                : [],
+            }
+          },
+        },
+      },
+    }
+    const collector = createCollector(harness, DEFAULT_CONFIG, () => {})
+
+    collector.getAggregate("ses_tree_root", "tree", performance.now())
+    await Bun.sleep(10)
+    const aggregate = collector.getAggregate("ses_tree_root", "tree", performance.now())
+
+    expect(childCalls).toEqual(["ses_tree_root", "ses_tree_child"])
+    expect(aggregate?.sessionIDs).toEqual(["ses_tree_root", "ses_tree_child"])
+    expect(aggregate?.outputTokens).toBe(22)
+    expect(aggregate?.childSessionCount).toBe(1)
 
     collector.dispose()
   })

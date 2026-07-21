@@ -58,14 +58,14 @@ opencode plugin opencode-metrics --global
 
 | 行 | 含义 |
 |-----|---------|
-| **Speed** | 每秒 token 数（`⚡`） |
-| **Elapsed** | 本次请求计时，完成时冻结（`▹`） |
-| **TTFT** | 首 token 耗时（`⏱`） |
-| **Tokens** | 输入 + 输出 同一行 —— `↓ in  ↑ out` |
+| **Speed** | 短滚动窗口内可观测的实时每秒 token 数；没有流式 delta 时显示 `—`（`⚡`） |
+| **Elapsed** | 前台 turn 的墙钟时间，完成时冻结（`▹`） |
+| **TTFT** | 前台最新 provider step 到首个可观测 delta 的耗时（`⏱`） |
+| **Tokens** | 最新上下文输入 + 当前 turn 累计的 finalized／live 输出：`↓ in  ↑ out` |
 | **Cache** | 缓存读取 token，拿到精确值时显示（`○`） |
-| **Session** | 会话累计活跃时间，空闲时冻结（`◷`） |
+| **Session** | 累计 busy 墙钟时间；tree scope 对重叠子会话区间取并集（`◷`） |
 
-标题徽标显示请求状态：`idle` · `waiting` · `streaming` · `complete`。
+部分 provider 只会在最终 usage 中报告隐藏 reasoning。它会计入 finalized 的 **Tokens out**，但不会被猜测成实时 **Speed**。
 
 ## current vs tree scope
 
@@ -85,12 +85,12 @@ opencode plugin opencode-metrics --global
 Tree 模式刻意保守：
 
 - 只纳入有真实 OpenCode 父子关系的会话；不会把无关联会话猜进总数。
-- 聚合当前会话和每个已知后代会话的最新可见请求。
+- 聚合前台 turn 以及参与本轮工作的后代 turn；更早 turn 的陈旧子会话不会永久留在分子中。
+- 实时 Speed 等于当前仍在产生可观测 delta 的后代速率之和；attach 后会递归发现已有后代。
 - input、output、cache-read token 直接求和。cache read 不去重，也不从 input 里扣掉。
 - 缓存精度会明示：完整缓存正常显示，部分缓存带 `+` 后缀，未知缓存显示 `—`。
-- Tree scope 下标题会带子会话徽标，例如 `streaming +3`。
 
-`Session` 是所选 scope 的累计活跃时间：请求运行时计时，会话空闲后冻结；下一次请求开始后继续累计，但不计入中间的空闲时间。重新挂接已有会话时，会从 OpenCode 的会话状态恢复已完成的助手消息耗时。`Elapsed` 仍然只计算最近一次请求。
+`Session` 是所选 scope 的累计 busy 墙钟时间：工作运行时计时，空闲后冻结；下一次工作开始后继续累计，但不计入中间的空闲时间。并行子会话的重叠区间只计一次。`Elapsed` 属于前台 turn；`TTFT` 始终使用前台 provider step 自己成对的起点与首 delta，不会跨后代拼接时间戳。
 
 ## 折叠 vs 展开
 
@@ -99,7 +99,7 @@ Tree 模式刻意保守：
 - **▼ 展开** —— 完整明细：Speed、Elapsed、TTFT、Tokens、Cache、Session。
 - **▶ 折叠** —— 紧凑速览：只有 **Speed + Session**（空闲时只剩标题）。
 
-请求结束后，上一次的数字会**保留**到下一次请求开始——Speed、Elapsed 和 Session 都会在完成时冻结。
+请求结束后，token 与计时总数会保留到下一次请求开始。两秒内没有新的可观测 delta 时，Speed 会变成 `—`，不会冻结一个过期吞吐值。
 
 ## 配置
 
@@ -183,7 +183,7 @@ bun run build
 npm pack --dry-run
 ```
 
-`./tui` 导出指向 `src/tui.tsx`（不是 `dist`），因为 `@opentui/solid@0.3.4` 只带类型版 JSX runtime；OpenCode 通过它的 Bun preload 加载 TSX，和 Magic Context 同样的做法。
+`./tui` 导出指向 `src/tui.tsx`，因为 OpenCode 会通过 Bun preload 加载 TUI plugin TSX，这符合既有 TUI plugin 模式。
 
 ## 由来
 

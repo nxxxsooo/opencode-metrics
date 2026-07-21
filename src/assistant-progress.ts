@@ -3,6 +3,7 @@ import { parseAssistantTextDelta } from "./event-shapes"
 import { currentRequest } from "./request-state"
 import { eventAggregateID, eventID, eventProperties, stringEventProperty } from "./event-bus"
 import type { EventHandlerContext } from "./collector-state"
+import { recordLiveTokens } from "./live-speed"
 
 export interface AssistantProgressPart {
   readonly partID: string
@@ -10,8 +11,28 @@ export interface AssistantProgressPart {
   readonly text: string
 }
 
-function partEstimateKey(sessionID: string, partID: string): string {
-  return `${sessionID}:${partID}`
+function partEstimateKey(sessionID: string, messageID: string, partID: string): string {
+  return `${sessionID}:${messageID}:${partID}`
+}
+
+function applyTokenDelta(
+  ctx: EventHandlerContext,
+  sessionID: string,
+  messageID: string,
+  deltaTokens: number,
+  now: number,
+): void {
+  const { actions, state } = ctx
+  if (state.turns.get(sessionID)?.finalizedSteps.has(messageID)) return
+  const current = currentRequest({ state, actions, sessionID, messageID, now })
+  if (current.firstTokenTime === null) current.firstTokenTime = now
+  if (deltaTokens > 0) {
+    current.estimatedOutputTokens += deltaTokens
+    current.lastDeltaTime = now
+    recordLiveTokens(state.liveSpeeds, sessionID, messageID, deltaTokens, now)
+  }
+  current.isStreaming = true
+  actions.notify()
 }
 
 function applyAssistantText(
@@ -23,23 +44,12 @@ function applyAssistantText(
   now: number,
 ): void {
   const { actions, config, state } = ctx
-  const current = currentRequest({ state, actions, sessionID, messageID, now })
-  if (current.firstTokenTime === null) {
-    current.firstTokenTime = now
-  }
-
-  const key = partEstimateKey(sessionID, partID)
+  const key = partEstimateKey(sessionID, messageID, partID)
   const nextTokens = estimateTokens(text, config.estimationRatio)
   const previousTokens = state.partTokenEstimates.get(key) ?? 0
   const deltaTokens = Math.max(0, nextTokens - previousTokens)
-  state.partTexts.set(key, text)
-  state.partTokenEstimates.set(key, nextTokens)
-  if (deltaTokens > 0) {
-    current.estimatedOutputTokens += deltaTokens
-    current.lastDeltaTime = now
-  }
-  current.isStreaming = true
-  actions.notify()
+  state.partTokenEstimates.set(key, Math.max(previousTokens, nextTokens))
+  applyTokenDelta(ctx, sessionID, messageID, deltaTokens, now)
 }
 
 export function applyAssistantProgress(
@@ -68,7 +78,22 @@ export function applyAssistantDelta(ctx: EventHandlerContext, event: unknown): v
   }
   const now = performance.now()
   actions.startSessionTiming(text.sessionID, now)
-  const key = partEstimateKey(text.sessionID, text.partID)
-  const previousText = state.partTexts.get(key) ?? ""
-  applyAssistantText(ctx, text.sessionID, text.messageID, text.partID, `${previousText}${text.delta}`, now)
+  const key = partEstimateKey(text.sessionID, text.messageID, text.partID)
+  const deltaTokens = estimateTokens(text.delta, ctx.config.estimationRatio)
+  state.partTokenEstimates.set(key, (state.partTokenEstimates.get(key) ?? 0) + deltaTokens)
+  applyTokenDelta(ctx, text.sessionID, text.messageID, deltaTokens, now)
+}
+
+export function applyAssistantPartDelta(
+  ctx: EventHandlerContext,
+  sessionID: string,
+  messageID: string,
+  partID: string,
+  delta: string,
+  now: number,
+): void {
+  const key = partEstimateKey(sessionID, messageID, partID)
+  const deltaTokens = estimateTokens(delta, ctx.config.estimationRatio)
+  ctx.state.partTokenEstimates.set(key, (ctx.state.partTokenEstimates.get(key) ?? 0) + deltaTokens)
+  applyTokenDelta(ctx, sessionID, messageID, deltaTokens, now)
 }

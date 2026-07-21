@@ -77,13 +77,6 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
         return m.isComplete && m.completeTime !== null ? m.completeTime : live
     }
 
-    const aggregateTps = (m: MetricsAggregate, frozen: number): number => {
-        const baseTime = m.firstTokenTime ?? m.requestStartTime
-        const elapsedMs = frozen - baseTime
-        if (elapsedMs <= 0) return 0
-        return Math.round((m.outputTokens / (elapsedMs / 1000)) * 10) / 10
-    }
-
     const rowVisible = (key: keyof BarConfig["visible"]): boolean => {
         const barVis = props.barConfig.visible
         const rowPrefs = props.controller.prefs().rows
@@ -112,8 +105,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
     }
     const speedValue = () => {
         const m = currentAggregate()
-        const tps = m ? aggregateTps(m, frozenNow()) : 0
-        return `${tps.toFixed(1)} t/s`
+        return m?.liveTps === null || m?.liveTps === undefined ? "—" : `${m.liveTps.toFixed(1)} t/s`
     }
     const elapsedValue = () => {
         const m = currentAggregate()

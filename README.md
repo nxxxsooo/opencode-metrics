@@ -58,14 +58,14 @@ For the **current** session, during and after a request:
 
 | Row | Meaning |
 |-----|---------|
-| **Speed** | tokens per second (`⚡`) |
-| **Elapsed** | per-request run time, freezes on completion (`▹`) |
-| **TTFT** | time to first token (`⏱`) |
-| **Tokens** | input + output on one line — `↓ in  ↑ out` |
+| **Speed** | observable real-time tokens per second over a short rolling window; `—` while no stream is producing deltas (`⚡`) |
+| **Elapsed** | foreground-turn wall time, freezes on completion (`▹`) |
+| **TTFT** | latest foreground provider step to first observable delta (`⏱`) |
+| **Tokens** | latest context input + turn-cumulative finalized/live output on one line — `↓ in  ↑ out` |
 | **Cache** | cache-read tokens, when exact counts arrive (`○`) |
-| **Session** | cumulative active time for the session; freezes while idle (`◷`) |
+| **Session** | cumulative busy wall time; tree scope unions overlapping child intervals (`◷`) |
 
-The header badge shows request state: `idle` · `waiting` · `streaming` · `complete`.
+Providers may withhold hidden reasoning until final usage. Hidden reasoning is included in finalized **Tokens out**, but is never guessed into live **Speed**.
 
 ## Current vs tree scope
 
@@ -85,12 +85,12 @@ Set `scope` to `tree` when you want the current session plus known child/sub-age
 Tree mode is intentionally conservative:
 
 - It only includes sessions with a real OpenCode parent-child link; unlinked sessions are never guessed into the total.
-- It aggregates the latest visible request for the current session and each known descendant session.
+- It aggregates the foreground turn and descendant turns participating in it; stale descendants from earlier turns do not remain in the numerator forever.
+- Live Speed is the sum of descendants currently producing observable deltas. Existing descendants are discovered recursively after attach.
 - Input, output, and cache-read tokens are summed directly. Cache reads are **not** deduplicated or subtracted from input.
 - Cache precision is explicit: exact cache shows normally, partial cache shows a `+` suffix, and unknown cache shows `—`.
-- The header adds a child-session badge in tree scope, for example `streaming +3`.
 
-`Session` is cumulative active time for the selected scope. It advances while a request is busy, freezes when the session becomes idle, and resumes on the next request without counting the idle gap. When attaching to an existing session, completed assistant-message timings are restored from OpenCode's session state. `Elapsed` remains timing for the latest request.
+`Session` is cumulative busy wall time for the selected scope. It advances while work is busy, freezes when idle, and resumes without counting the idle gap. Parallel child intervals count once rather than inflating the clock. `Elapsed` is the foreground turn; `TTFT` remains paired to the foreground provider step rather than mixing timestamps from different descendants.
 
 ## Collapsed vs expanded
 
@@ -99,7 +99,7 @@ Click the header badge to toggle:
 - **▼ Expanded** — full breakdown: Speed, Elapsed, TTFT, Tokens, Cache, Session.
 - **▶ Collapsed** — compact glance: **Speed + Session** only (or just the header when idle).
 
-When a request finishes, the last numbers **stay visible** until the next request — Speed, Elapsed, and Session freeze at completion.
+When a request finishes, token and timing totals stay visible until the next request. Speed becomes `—` as soon as no observable delta has arrived for two seconds; it never freezes a stale throughput value.
 
 ## Configuration
 
@@ -184,7 +184,7 @@ bun run build
 npm pack --dry-run
 ```
 
-The `./tui` export points at `src/tui.tsx` (not `dist`) because `@opentui/solid@0.3.4` ships a type-only JSX runtime; OpenCode loads the TSX through its Bun preload, the same pattern Magic Context uses.
+The `./tui` export points at `src/tui.tsx` because OpenCode loads TUI plugin TSX through its Bun preload, matching the established TUI plugin pattern.
 
 ## Credits
 
