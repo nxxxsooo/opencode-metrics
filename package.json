@@ -1,7 +1,7 @@
 {
   "name": "opencode-metrics",
-  "version": "0.2.16",
-  "description": "OpenCode TUI sidebar plugin for real-time LLM token metrics",
+  "version": "0.3.0",
+  "description": "OpenCode O2 CLI sidebar plugin for real-time LLM token metrics",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nxxxsooo/opencode-metrics.git"
@@ -19,9 +19,6 @@
       "types": "./dist/tui.d.ts"
     }
   },
-  "oc-plugin": [
-    "tui"
-  ],
   "files": [
     "dist/tui.d.ts",
     "src/tui.tsx",
@@ -62,10 +59,10 @@
     "prepublishOnly": "tsup"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "latest",
-    "@opencode-ai/sdk": "latest",
-    "@opentui/core": "0.4.5",
-    "@opentui/solid": "0.4.5",
+    "@opencode-ai/plugin": "beta",
+    "@opencode-ai/theme": "^0.0.0-beta-19086",
+    "@opentui/core": "latest",
+    "@opentui/solid": "latest",
     "@types/bun": "latest",
     "solid-js": "^1.9.12",
     "tsup": "latest",
@@ -75,10 +72,9 @@
     "comment-json": "^5.0.0"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": "*",
-    "@opencode-ai/sdk": "*",
-    "@opentui/core": ">=0.4.5 <1",
-    "@opentui/solid": ">=0.4.5 <1",
+    "@opencode-ai/plugin": "beta",
+    "@opentui/core": ">=0.5.10 <1",
+    "@opentui/solid": ">=0.5.10 <1",
     "solid-js": ">=1.9.0 <2"
   }
 }

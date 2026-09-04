@@ -16,12 +16,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - baseline: stable-latest
-            plugin: latest
-            sdk: latest
-          - baseline: tui-v2-candidate
-            plugin: 0.0.0-tui-v2-202606261840
-            sdk: 0.0.0-tui-v2-202606261840
+          - baseline: o2-beta
+            plugin: beta
     name: ${{ matrix.baseline }}
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +35,6 @@ jobs:
       - name: Overlay explicit OpenCode baseline
         env:
           OPENCODE_PLUGIN_VERSION: ${{ matrix.plugin }}
-          OPENCODE_SDK_VERSION: ${{ matrix.sdk }}
         run: |
           replace_package() {
             name="$1"
@@ -51,11 +46,10 @@ jobs:
             curl --fail --silent --show-error --location "$tarball" \
               | tar -xz --strip-components=1 -C "$destination"
           }
-          replace_package @opencode-ai/sdk "$OPENCODE_SDK_VERSION"
           replace_package @opencode-ai/plugin "$OPENCODE_PLUGIN_VERSION"
           node - <<'NODE'
           const fs = require("node:fs")
-          for (const name of ["plugin", "sdk"]) {
+          for (const name of ["plugin"]) {
             const path = `node_modules/@opencode-ai/${name}/package.json`
             console.log(`${name}: ${JSON.parse(fs.readFileSync(path, "utf8")).version}`)
           }

@@ -22,13 +22,16 @@
 
 ## 从 npm 安装
 
-使用 OpenCode 的插件安装命令：
+将包加入 O2 CLI 插件配置：
 
-```bash
-opencode plugin opencode-metrics --global
+```json
+// ~/.config/opencode/cli.json
+{
+  "plugins": ["opencode-metrics"]
+}
 ```
 
-该命令会从 npm 安装软件包，并自动加入全局 OpenCode TUI 配置。安装后新开一个 TUI 窗口或重新 attach；插件只在 TUI 启动时加载，不会热重载，也无需重启 OpenCode 服务。
+配置后新开一个 O2 TUI 窗口；CLI 插件只在启动时加载，不会热重载，也无需重启 OpenCode 服务。
 
 <details>
 <summary>手动配置</summary>
@@ -56,12 +59,11 @@ opencode plugin opencode-metrics --global
 
 | OpenCode 版本线 | 状态 | 证据 |
 |---|---|---|
-| `1.18.x` | 正式支持 | 自动化测试、类型检查、构建、包校验，以及当前 TUI 插件契约 |
-| 演进中的 V2 | 已做好兼容准备 | 同一个包持续针对明确的 `tui-v2` SDK／plugin 候选版本检查；最终运行时支持需等待官方可运行 V2 发行版验证 |
+| O2 beta | 正式支持 | 基于当前 `@opencode-ai/plugin@beta` CLI 插件契约构建，并在 O2 TUI 中完成 smoke test |
 
 插件通过能力探测适配宿主，不根据版本字符串猜接口。它优先读取 TUI 内存中的会话状态，历史消息和子会话发现不可用时回退到公开 session client；这些历史能力都不可用时，实时事件指标仍可工作。缺失数据保持不可用（`—`），不会伪造；没有可验证父子关系的会话也不会被并入 tree scope。
 
-快照上的编译／测试通过不等于正式 V2 运行时证明。只有同一个包在官方 V2 TUI 中成功加载、通过并发 attach 会话隔离，并跑通真实子会话树后，才会宣称正式 V2 支持。OpenCode Desktop 不是本 TUI 插件支持的渲染面。
+OpenCode Desktop 不是本 CLI 插件支持的渲染面。
 
 ## 显示什么
 
@@ -150,14 +152,12 @@ bun run init:prefs
 如果你是替用户安装本插件的 AI 编码 agent，完整流程是：
 
 ```text
-目标：把 opencode-metrics 装进用户的 OpenCode TUI。
+目标：把 opencode-metrics 装进用户的 OpenCode O2 TUI。
 
-1. 运行：opencode plugin opencode-metrics --global
-2. 该命令会从 npm 安装软件包，并更新全局 TUI 配置。
-3. 如果安装命令不可用，则在 ~/.config/opencode/tui.jsonc 的 "plugin"
-   数组加入 "opencode-metrics"，不要删除其他插件条目。
-4. 不要加版本后缀；"opencode-metrics" 解析为 latest。
-5. 让用户开一个新的 TUI 窗口 / attach —— 插件只在 TUI 启动时加载，
+1. 在 ~/.config/opencode/cli.json 的 "plugins" 数组加入
+   "opencode-metrics"，不要删除其他插件条目。
+2. 不要加版本后缀；"opencode-metrics" 解析为 latest。
+3. 让用户开一个新的 O2 TUI 窗口 —— 插件只在 TUI 启动时加载，
    不会热重载。不要重启 OpenCode 服务。
 
 验证：TUI 侧边栏出现 "Metrics" 区块。点击它的标题徽标确认能折叠/展开。
@@ -167,7 +167,7 @@ bun run init:prefs
 绝不覆盖其他顶层 key，只动 "opencode-metrics"。
 
 说明：
-- 它是 TUI 插件（package.json: "oc-plugin": ["tui"]）；只在 OpenCode
+- 它是 O2 CLI 插件；只在 OpenCode
   TUI 里渲染，不在无头 / CI 运行中显示。
 - 它默认就是分会话的：`opencode serve` 下每个 attach 的会话显示
   自己的指标，绝不全局求和。
@@ -191,7 +191,7 @@ bun run init:prefs
 bun run check
 ```
 
-CI 会对最新的 OpenCode stable 基线和明确的 `0.0.0-tui-v2-202606261840` 候选版本执行同一组检查。候选版本只能证明接口准备度；正式宣称支持某个 V2 发行版前仍需完成真实 TUI smoke test。
+CI 会针对当前 OpenCode O2 `beta` 插件契约执行检查。
 
 `./tui` 导出指向 `src/tui.tsx`，因为 OpenCode 会通过 Bun preload 加载 TUI plugin TSX，这符合既有 TUI plugin 模式。
 

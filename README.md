@@ -22,13 +22,16 @@ English · [简体中文](./README_CN.md)
 
 ## Install from npm
 
-Use OpenCode's plugin installer:
+Add the package to the O2 CLI plugin configuration:
 
-```bash
-opencode plugin opencode-metrics --global
+```json
+// ~/.config/opencode/cli.json
+{
+  "plugins": ["opencode-metrics"]
+}
 ```
 
-This installs the package from npm and adds it to your global OpenCode TUI configuration. Open a new TUI window or attach after installation; plugins are loaded at TUI startup and are not hot-reloaded. No server restart is required.
+Open a new O2 TUI window after installation; CLI plugins are loaded at startup and are not hot-reloaded. No server restart is required.
 
 <details>
 <summary>Manual configuration</summary>
@@ -56,12 +59,11 @@ A global footer-style status line keeps **one** request view. Under `opencode se
 
 | OpenCode line | Status | Evidence |
 |---|---|---|
-| `1.18.x` | Supported | Automated tests, typecheck, build, package validation, and the current TUI plugin contract |
-| Emerging V2 | Compatibility-ready | The same package is checked against the explicit `tui-v2` SDK/plugin candidate; final runtime support waits for an official runnable V2 release |
+| O2 beta | Supported | Built against the current `@opencode-ai/plugin@beta` CLI plugin contract and smoke-tested in the O2 TUI |
 
 The plugin detects host capabilities rather than switching behavior from a version string. It prefers the TUI's in-memory session state, falls back to the public session client for history and child discovery, and keeps live metrics working when those historical APIs are unavailable. Missing data stays unavailable (`—`) instead of being guessed, and sessions without a verified parent relationship are never folded into tree scope.
 
-A compile/test pass against a snapshot is not presented as final V2 runtime proof. That claim is gated on loading this exact package in an official V2 TUI, verifying concurrent attach isolation, and exercising a real child-session tree. OpenCode Desktop is not a supported rendering surface for this TUI plugin.
+OpenCode Desktop is not a supported rendering surface for this CLI plugin.
 
 ## What it shows
 
@@ -150,14 +152,12 @@ Runtime behavior (`refreshIntervalMs`, `holdDurationMs`, `estimationRatio`, `ena
 If you are an AI coding agent installing this for a user, the full procedure is:
 
 ```text
-GOAL: install opencode-metrics into the user's OpenCode TUI.
+GOAL: install opencode-metrics into the user's OpenCode O2 TUI.
 
-1. Run: opencode plugin opencode-metrics --global
-2. This installs the package from npm and updates the global TUI config.
-3. If the installer is unavailable, add "opencode-metrics" to the "plugin"
-   array in ~/.config/opencode/tui.jsonc without removing sibling entries.
-4. Do NOT add a version suffix; "opencode-metrics" resolves latest.
-5. Tell the user to open a NEW TUI window/attach — plugins load at TUI
+1. Add "opencode-metrics" to the "plugins" array in
+   ~/.config/opencode/cli.json without removing sibling entries.
+2. Do NOT add a version suffix; "opencode-metrics" resolves latest.
+3. Tell the user to open a NEW O2 TUI window — plugins load at TUI
    startup and are not hot-reloaded. Do not restart the OpenCode server.
 
 VERIFY: a "Metrics" section appears in the TUI sidebar. Click its header
@@ -168,7 +168,7 @@ OPTIONAL: write ~/.config/opencode/tui-preferences.jsonc with an
 Never overwrite sibling top-level keys; only touch "opencode-metrics".
 
 NOTES:
-- It is a TUI plugin (package.json: "oc-plugin": ["tui"]); it only renders
+- It is an O2 CLI plugin; it only renders
   inside the OpenCode TUI, not in headless/CI runs.
 - It defaults to per-session by design: under `opencode serve` each attached
   session shows its own metrics, never a global sum.
@@ -192,7 +192,7 @@ Checks:
 bun run check
 ```
 
-CI runs the same checks against the latest OpenCode stable baseline and the explicit `0.0.0-tui-v2-202606261840` candidate. The candidate validates interface readiness only; use a real TUI smoke test before claiming support for a final V2 release.
+CI checks against the current OpenCode O2 `beta` plugin contract.
 
 The `./tui` export points at `src/tui.tsx` because OpenCode loads TUI plugin TSX through its Bun preload, matching the established TUI plugin pattern.
 

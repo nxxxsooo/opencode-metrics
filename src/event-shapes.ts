@@ -159,7 +159,7 @@ export function parseAssistantMessage(value: unknown): AssistantMessageEvent | n
 }
 
 export function parseUserMessage(value: unknown): UserMessageEvent | null {
-  if (!isRecord(value) || value.role !== "user") return null
+  if (!isRecord(value) || (value.role !== "user" && value.type !== "user")) return null
   const time = isRecord(value.time) ? value.time : null
   return { messageID: stringOrEmpty(value.id), createdTime: timestampOrNull(time?.created) }
 }

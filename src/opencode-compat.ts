@@ -1,4 +1,4 @@
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { Context } from "@opencode-ai/plugin/tui/plugin"
 import type { MetricsEventApi } from "./event-bus"
 import type { HydrationApi } from "./session-hydration"
 
@@ -89,7 +89,7 @@ export function isMetricsHost(value: unknown): value is MetricsHost {
 }
 
 export function createOpenCodeHost(
-  api: TuiPluginApi | MetricsEventApi | unknown,
+  api: MetricsEventApi | unknown,
   log: (message: string) => void = () => {},
 ): MetricsHost {
   if (!isRecord(api) || !isRecord(api.event) || typeof api.event.on !== "function") {
@@ -152,6 +152,90 @@ export function createOpenCodeHost(
     },
     dispose() {
       disposed = true
+    },
+  }
+}
+
+export function createOpenCodeV2Host(context: Context, log: (message: string) => void = () => {}): MetricsHost {
+  const handlers = new Map<string, Set<(event: unknown) => void>>()
+  let disposed = false
+
+  function emit(type: string, event: unknown): void {
+    for (const handler of handlers.get(type) ?? []) handler(event)
+  }
+
+  const stop = context.data.listen(({ details }) => {
+    if (disposed) return
+    const event = details as unknown as { type?: string; data?: Record<string, unknown> }
+    const data = event.data ?? {}
+    switch (event.type) {
+      case "session.execution.started":
+        emit("session.status", { ...details, data: { ...data, status: { type: "busy" } } })
+        break
+      case "session.execution.succeeded":
+      case "session.execution.failed":
+      case "session.execution.interrupted":
+        emit("session.status", { ...details, data: { ...data, status: { type: "idle" } } })
+        break
+      case "session.step.started": emit("session.next.step.started", details); break
+      case "session.step.ended": emit("session.next.step.ended", details); break
+      case "session.text.delta": emit("session.next.text.delta", details); break
+      case "session.reasoning.delta": emit("session.next.reasoning.delta", details); break
+      default: emit(event.type ?? "", details)
+    }
+  })
+
+  return {
+    kind: "opencode-metrics-host",
+    event: {
+      on(type, handler) {
+        const set = handlers.get(type) ?? new Set<(event: unknown) => void>()
+        set.add(handler)
+        handlers.set(type, set)
+        return () => set.delete(handler)
+      },
+    },
+    getStateHydrationApi() {
+      if (disposed) return null
+      return {
+        state: {
+          session: {
+            messages: (sessionID) => context.data.session.message.list(sessionID),
+            status: (sessionID) => context.data.session.status(sessionID),
+          },
+        },
+      }
+    },
+    async fetchHydrationApi(sessionID) {
+      if (disposed) return null
+      try {
+        await context.data.session.message.sync(sessionID)
+        return this.getStateHydrationApi()
+      } catch (error) {
+        log(`session message sync failed: session=${sessionID} error=${String(error)}`)
+        return null
+      }
+    },
+    async fetchChildren(sessionID) {
+      if (disposed) return null
+      try {
+        await context.data.session.sync(sessionID)
+        return context.data.session.list()
+          .filter((session) => session.parentID === sessionID)
+          .map((session) => ({ id: session.id, parentID: session.parentID ?? null }))
+      } catch (error) {
+        log(`session children sync failed: session=${sessionID} error=${String(error)}`)
+        return null
+      }
+    },
+    requestRender() {
+      if (!disposed) context.renderer.requestRender()
+    },
+    dispose() {
+      if (disposed) return
+      disposed = true
+      stop()
+      handlers.clear()
     },
   }
 }

@@ -2,8 +2,7 @@
 /** @jsxRuntime automatic */
 import { createMemo, createSignal, onCleanup } from "solid-js"
 import type { BoxRenderable } from "@opentui/core"
-import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import type { BarConfig, MetricsAggregate } from "../types"
+import type { BarConfig, MetricsAggregate, MetricsTheme } from "../types"
 import type { MetricsCollector } from "../collector"
 import {
     formatTokens,
@@ -19,7 +18,7 @@ interface SidebarMetricsProps {
     collector: MetricsCollector
     refreshIntervalMs: number
     barConfig: BarConfig
-    theme: TuiThemeCurrent
+    theme: MetricsTheme
     controller: MetricsSidebarController
     requestRender?: () => void
 }

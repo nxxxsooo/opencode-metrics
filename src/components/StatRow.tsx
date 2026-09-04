@@ -1,11 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 /** @jsxRuntime automatic */
 import { onCleanup } from "solid-js"
-import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import type { BoxRenderable, TextRenderable } from "@opentui/core"
+import type { MetricsTheme } from "../types"
 
 interface StatRowProps {
-    theme: TuiThemeCurrent
+    theme: MetricsTheme
     label: string
     value: string | (() => string)
     accent?: boolean

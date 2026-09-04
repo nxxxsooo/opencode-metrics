@@ -96,6 +96,14 @@ export interface BarConfig {
   }
 }
 
+export interface MetricsTheme {
+  text: import("@opentui/core").RGBA
+  textMuted: import("@opentui/core").RGBA
+  accent: import("@opentui/core").RGBA
+  warning: import("@opentui/core").RGBA
+  success: import("@opentui/core").RGBA
+}
+
 export const DEFAULT_CONFIG: BarConfig = {
   refreshIntervalMs: 200,
   holdDurationMs: 0,
