@@ -68,7 +68,7 @@
     "@opentui/solid": "0.4.5",
     "@types/bun": "latest",
     "solid-js": "^1.9.12",
-    "tsup": "^8.0.0",
+    "tsup": "latest",
     "typescript": "^5.0.0"
   },
   "dependencies": {
