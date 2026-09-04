@@ -26,7 +26,7 @@ export default Plugin.define({
       success: context.theme.text.feedback.success.default,
     }
     const unregister = context.ui.slot({
-      append: "sidebar.content",
+      prepend: "sidebar.content",
       render: ({ sessionID }) => (
         <SidebarMetrics
           sessionID={sessionID}
