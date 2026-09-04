@@ -52,6 +52,17 @@ opencode plugin opencode-metrics --global
 
 `opencode-metrics` 把每个请求按 `sessionID` 记录，并只渲染 OpenCode 传给 `sidebar_content` slot 的当前 `session_id`。**你永远看到的是自己这个会话。**
 
+## 兼容性
+
+| OpenCode 版本线 | 状态 | 证据 |
+|---|---|---|
+| `1.18.x` | 正式支持 | 自动化测试、类型检查、构建、包校验，以及当前 TUI 插件契约 |
+| 演进中的 V2 | 已做好兼容准备 | 同一个包持续针对明确的 `tui-v2` SDK／plugin 候选版本检查；最终运行时支持需等待官方可运行 V2 发行版验证 |
+
+插件通过能力探测适配宿主，不根据版本字符串猜接口。它优先读取 TUI 内存中的会话状态，历史消息和子会话发现不可用时回退到公开 session client；这些历史能力都不可用时，实时事件指标仍可工作。缺失数据保持不可用（`—`），不会伪造；没有可验证父子关系的会话也不会被并入 tree scope。
+
+快照上的编译／测试通过不等于正式 V2 运行时证明。只有同一个包在官方 V2 TUI 中成功加载、通过并发 attach 会话隔离，并跑通真实子会话树后，才会宣称正式 V2 支持。OpenCode Desktop 不是本 TUI 插件支持的渲染面。
+
 ## 显示什么
 
 针对**当前**会话，请求过程中和结束后：
@@ -177,11 +188,10 @@ bun run init:prefs
 检查：
 
 ```bash
-bun test
-bunx tsc --noEmit
-bun run build
-npm pack --dry-run
+bun run check
 ```
+
+CI 会对最新的 OpenCode stable 基线和明确的 `0.0.0-tui-v2-202606261840` 候选版本执行同一组检查。候选版本只能证明接口准备度；正式宣称支持某个 V2 发行版前仍需完成真实 TUI smoke test。
 
 `./tui` 导出指向 `src/tui.tsx`，因为 OpenCode 会通过 Bun preload 加载 TUI plugin TSX，这符合既有 TUI plugin 模式。
 

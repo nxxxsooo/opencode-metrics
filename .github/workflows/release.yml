@@ -26,5 +26,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
       - run: bun test
+      - run: bun run typecheck
       - run: bun run build
+      - run: npm pack --dry-run
       - run: npm publish --access public

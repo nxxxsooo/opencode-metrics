@@ -52,6 +52,17 @@ A global footer-style status line keeps **one** request view. Under `opencode se
 
 `opencode-metrics` stores every request keyed by `sessionID` and renders only the active `session_id` that OpenCode passes to its `sidebar_content` slot. **You always see your own session.**
 
+## Compatibility
+
+| OpenCode line | Status | Evidence |
+|---|---|---|
+| `1.18.x` | Supported | Automated tests, typecheck, build, package validation, and the current TUI plugin contract |
+| Emerging V2 | Compatibility-ready | The same package is checked against the explicit `tui-v2` SDK/plugin candidate; final runtime support waits for an official runnable V2 release |
+
+The plugin detects host capabilities rather than switching behavior from a version string. It prefers the TUI's in-memory session state, falls back to the public session client for history and child discovery, and keeps live metrics working when those historical APIs are unavailable. Missing data stays unavailable (`—`) instead of being guessed, and sessions without a verified parent relationship are never folded into tree scope.
+
+A compile/test pass against a snapshot is not presented as final V2 runtime proof. That claim is gated on loading this exact package in an official V2 TUI, verifying concurrent attach isolation, and exercising a real child-session tree. OpenCode Desktop is not a supported rendering surface for this TUI plugin.
+
 ## What it shows
 
 For the **current** session, during and after a request:
@@ -178,11 +189,10 @@ Point the plugin entry at a local checkout instead of the package:
 Checks:
 
 ```bash
-bun test
-bunx tsc --noEmit
-bun run build
-npm pack --dry-run
+bun run check
 ```
+
+CI runs the same checks against the latest OpenCode stable baseline and the explicit `0.0.0-tui-v2-202606261840` candidate. The candidate validates interface readiness only; use a real TUI smoke test before claiming support for a final V2 release.
 
 The `./tui` export points at `src/tui.tsx` because OpenCode loads TUI plugin TSX through its Bun preload, matching the established TUI plugin pattern.
 

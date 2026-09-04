@@ -1,48 +1,16 @@
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BarConfig, CacheReadCompleteness, MetricsAggregate, MetricsScope, RequestMetrics } from "./types"
 import { getDisplayInputTokens, getDisplayOutputTokens, getTtft } from "./metrics"
 import { registerEventHandlers } from "./event-handlers"
 import type { CollectorState } from "./collector-state"
 import type { MetricsEventApi } from "./event-bus"
-import { hydrateSession, isHydrationApi, type HydrationApi } from "./session-hydration"
+import { createOpenCodeHost, isMetricsHost, type MetricsHost } from "./opencode-compat"
+import { hydrateSession } from "./session-hydration"
 import { createSessionTree } from "./session-tree"
 import { getScopeElapsedMs, getSessionElapsedMs, startSessionTiming, stopSessionTiming } from "./session-timing"
 import { getLiveTps } from "./live-speed"
 import { liveRequestOutput, turnInputTokens } from "./turn-state"
 
 export type MetricsListener = () => void
-type MetricsHydrationApi = MetricsEventApi & HydrationApi
-
-interface TreeHydrationApi {
-  readonly client: {
-    readonly session: {
-      children(input: { sessionID: string }): Promise<unknown>
-    }
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function isTreeHydrationApi(value: unknown): value is TreeHydrationApi {
-  if (!isRecord(value) || !isRecord(value.client)) return false
-  const session = isRecord(value.client.session) ? value.client.session : null
-  return session !== null && typeof session.children === "function"
-}
-
-function childSessions(value: unknown): Array<{ id: string; parentID: string | null }> {
-  if (isRecord(value) && value.error !== undefined && value.error !== null) {
-    throw new Error(`session.children returned an error: ${String(value.error)}`)
-  }
-  const data = Array.isArray(value)
-    ? value
-    : isRecord(value) && Array.isArray(value.data) ? value.data : []
-  return data.flatMap((item) => {
-    if (!isRecord(item) || typeof item.id !== "string" || item.id.length === 0) return []
-    return [{ id: item.id, parentID: typeof item.parentID === "string" ? item.parentID : null }]
-  })
-}
 
 export interface MetricsCollector {
   getCurrent(sessionID: string): RequestMetrics | null
@@ -54,25 +22,11 @@ export interface MetricsCollector {
 }
 
 export function createCollector(
-  api: TuiPluginApi,
-  config: BarConfig,
-  log: (msg: string) => void,
-): MetricsCollector
-export function createCollector(
-  api: MetricsEventApi,
-  config: BarConfig,
-  log: (msg: string) => void,
-): MetricsCollector
-export function createCollector(
-  api: MetricsHydrationApi,
-  config: BarConfig,
-  log: (msg: string) => void,
-): MetricsCollector
-export function createCollector(
-  api: TuiPluginApi | MetricsEventApi | MetricsHydrationApi,
+  api: MetricsHost | MetricsEventApi | unknown,
   config: BarConfig,
   log: (msg: string) => void,
 ): MetricsCollector {
+  const host = isMetricsHost(api) ? api : createOpenCodeHost(api, log)
   const state: CollectorState = {
     requests: new Map(),
     turns: new Map(),
@@ -90,9 +44,8 @@ export function createCollector(
     lastRequestSessionID: null,
   }
   const listeners = new Set<MetricsListener>()
-  const hydrationApi = isHydrationApi(api) ? api : null
-  const treeHydrationApi = isTreeHydrationApi(api) ? api : null
   const hydratedSessions = new Set<string>()
+  const hydratingSessions = new Set<string>()
   const hydrationRetryAfter = new Map<string, number>()
   const loggedFallbacks = new Set<string>()
   const hydratedTreeRoots = new Set<string>()
@@ -114,7 +67,7 @@ export function createCollector(
   }
 
   const disposers = registerEventHandlers({
-    api,
+    api: host,
     config,
     log,
     state,
@@ -126,28 +79,60 @@ export function createCollector(
     },
   })
 
-  function hydrate(sessionID: string): void {
-    if (!hydrationApi || hydratedSessions.has(sessionID)) return
-    const now = performance.now()
-    if ((hydrationRetryAfter.get(sessionID) ?? 0) > now) return
-    let hydrated = false
-    try {
-      hydrated = hydrateSession({ api: hydrationApi, state, sessionID, now })
-    } catch (error) {
-      log(`session hydration failed: session=${sessionID} error=${String(error)}`)
-    }
+  function recordHydration(sessionID: string, hydrated: boolean, now: number): boolean {
     const current = state.requests.get(sessionID)
     if (hydrated && current) {
       hydratedSessions.add(sessionID)
       hydrationRetryAfter.delete(sessionID)
       log(`hydrated session state: session=${sessionID} message=${current.messageID} in=${current.exactInputTokens} out=${current.exactOutputTokens}`)
-    } else {
-      hydrationRetryAfter.set(sessionID, now + 2000)
+      return true
     }
+    hydrationRetryAfter.set(sessionID, now + 2000)
+    return false
+  }
+
+  function hydrate(sessionID: string): void {
+    if (disposed || hydratedSessions.has(sessionID) || hydratingSessions.has(sessionID)) return
+    const now = performance.now()
+    if ((hydrationRetryAfter.get(sessionID) ?? 0) > now) return
+
+    const stateApi = host.getStateHydrationApi()
+    if (stateApi) {
+      try {
+        if (recordHydration(sessionID, hydrateSession({ api: stateApi, state, sessionID, now }), now)) return
+      } catch (error) {
+        log(`session state hydration failed: session=${sessionID} error=${String(error)}`)
+      }
+    }
+
+    const requestAtStart = state.requests.get(sessionID)
+    hydratingSessions.add(sessionID)
+    void host.fetchHydrationApi(sessionID).then((fallbackApi) => {
+      if (disposed || hydratedSessions.has(sessionID)) return
+      const fallbackNow = performance.now()
+      if (!fallbackApi) {
+        hydrationRetryAfter.set(sessionID, fallbackNow + 2000)
+        return
+      }
+      if (state.requests.get(sessionID) !== requestAtStart) {
+        hydratedSessions.add(sessionID)
+        hydrationRetryAfter.delete(sessionID)
+        return
+      }
+      try {
+        const hydrated = hydrateSession({ api: fallbackApi, state, sessionID, now: fallbackNow })
+        if (recordHydration(sessionID, hydrated, fallbackNow)) notify()
+      } catch (error) {
+        hydrationRetryAfter.set(sessionID, fallbackNow + 2000)
+        log(`session client hydration failed: session=${sessionID} error=${String(error)}`)
+      }
+    }).finally(() => {
+      hydratingSessions.delete(sessionID)
+    })
   }
 
   function hydrateTree(rootSessionID: string): void {
-    if (!treeHydrationApi || hydratedTreeRoots.has(rootSessionID) || hydratingTreeRoots.has(rootSessionID)) return
+    if (hydratedTreeRoots.has(rootSessionID) || hydratingTreeRoots.has(rootSessionID)) return
     const now = performance.now()
     if ((treeRetryAfter.get(rootSessionID) ?? 0) > now) return
     hydratingTreeRoots.add(rootSessionID)
@@ -159,12 +144,16 @@ export function createCollector(
         while (parents.length > 0) {
           const responses = await Promise.all(parents.map(async (parentID) => ({
             parentID,
-            response: await treeHydrationApi.client.session.children({ sessionID: parentID }),
+            children: await host.fetchChildren(parentID),
           })))
           if (disposed) return
+          if (responses.some((item) => item.children === null)) {
+            treeRetryAfter.set(rootSessionID, performance.now() + 2000)
+            return
+          }
           const next: string[] = []
-          for (const { parentID, response } of responses) {
-            for (const child of childSessions(response)) {
+          for (const { parentID, children } of responses) {
+            for (const child of children ?? []) {
               const childID = child.id
               state.sessionTree.setParent(childID, child.parentID ?? parentID)
               hydrate(childID)
@@ -383,11 +372,13 @@ export function createCollector(
       state.lastRequestSessionID = null
       loggedFallbacks.clear()
       hydratedSessions.clear()
+      hydratingSessions.clear()
       hydrationRetryAfter.clear()
       hydratedTreeRoots.clear()
       hydratingTreeRoots.clear()
       treeRetryAfter.clear()
       listeners.clear()
+      host.dispose()
     },
   }
 }

@@ -3,6 +3,7 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
 import type { PluginOptions } from "@opencode-ai/plugin"
 import { createCollector } from "./collector"
+import { createOpenCodeHost } from "./opencode-compat"
 import { getConfig } from "./config"
 import { log } from "./logger"
 import { SidebarMetrics } from "./components/SidebarMetrics"
@@ -17,14 +18,15 @@ import { readTuiPreferencesFileSync } from "./tui-prefs-io"
 
 const plugin: TuiPlugin = async (api: TuiPluginApi, _options: PluginOptions | undefined, _meta: TuiPluginMeta) => {
     const config = getConfig()
-    const collector = createCollector(api, config, log)
+    const host = createOpenCodeHost(api, log)
+    const collector = createCollector(host, config, log)
 
     // Sync-read preferences at slot mount so the sidebar renders at its final
     // order and collapse state on the first paint (no async flicker).
     const seedRoot = readTuiPreferencesFileSync()
     const effectiveOrder = computeEffectiveOrder(seedRoot, PLUGIN_KEY, DEFAULT_SLOT_ORDER)
     const prefs = resolveMetricsPrefs(seedRoot)
-    const controller = createMetricsSidebarController(prefs, () => api.renderer.requestRender())
+    const controller = createMetricsSidebarController(prefs, () => host.requestRender())
 
     api.slots.register({
         order: effectiveOrder,
@@ -38,7 +40,7 @@ const plugin: TuiPlugin = async (api: TuiPluginApi, _options: PluginOptions | un
                         barConfig={config}
                         theme={ctx.theme.current}
                         controller={controller}
-                        requestRender={() => api.renderer.requestRender()}
+                        requestRender={() => host.requestRender()}
                     />
                 )
             },

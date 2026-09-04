@@ -1,6 +1,6 @@
 {
   "name": "opencode-metrics",
-  "version": "0.2.15",
+  "version": "0.2.16",
   "description": "OpenCode TUI sidebar plugin for real-time LLM token metrics",
   "repository": {
     "type": "git",
@@ -45,6 +45,7 @@
     "src/session-tree.ts",
     "src/types.ts",
     "src/event-shapes.ts",
+    "src/opencode-compat.ts",
     "src/components/SidebarMetrics.tsx",
     "src/components/StatRow.tsx",
     "src/scripts/init-tui-preferences.ts",
@@ -55,24 +56,29 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun test && bun run typecheck && bun run build && npm pack --dry-run",
     "init:prefs": "OPENCODE_TUI_PREFERENCES_FILE=${OPENCODE_TUI_PREFERENCES_FILE:-$HOME/.config/opencode/tui-preferences.jsonc} bun run src/scripts/init-tui-preferences.ts",
     "prepublishOnly": "tsup"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "1.18.4",
-    "@opencode-ai/sdk": "1.18.4",
+    "@opencode-ai/plugin": "latest",
+    "@opencode-ai/sdk": "latest",
+    "@opentui/core": "0.4.5",
+    "@opentui/solid": "0.4.5",
     "@types/bun": "latest",
+    "solid-js": "^1.9.12",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@opentui/core": "0.4.5",
-    "@opentui/solid": "0.4.5",
-    "comment-json": "^5.0.0",
-    "solid-js": "^1.9.12"
+    "comment-json": "^5.0.0"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*",
-    "@opencode-ai/sdk": "*"
+    "@opencode-ai/sdk": "*",
+    "@opentui/core": ">=0.4.5 <1",
+    "@opentui/solid": ">=0.4.5 <1",
+    "solid-js": ">=1.9.0 <2"
   }
 }
