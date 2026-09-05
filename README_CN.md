@@ -99,7 +99,7 @@ Tree 模式刻意保守：
 - **▼ 展开** —— 完整明细：Speed、Elapsed、TTFT、Tokens、Cache、Session。
 - **▶ 折叠** —— 紧凑速览：**Speed + Tokens**。
 
-Speed 不再留空：`live` 表示滚动窗口可观测速率，`~avg` 表示本轮估算均速，`avg` 表示最终或保留的上一轮均速。新一轮等待首个输出时保留上一轮均速和 token，并标记 `running · waiting`；首个输出到来后替换。尚无任何读数的新会话显示「待测」，不会伪造 `0 t/s`。token 的 `~` 表示估算，cache 的 `+` 表示 tree 数据不完整。
+Speed 不再留空：`live` 表示滚动窗口可观测速率，`~avg` 表示本轮估算均速，`avg` 表示最终或保留的上一轮均速。新一轮等待首个输出时保留上一轮均速和 token，并标记 `running · waiting`；首个输出到来后替换。尚无任何读数的新会话显示 `pending`，不会伪造 `0 t/s`。token 的 `~` 表示估算，cache 的 `+` 表示 tree 数据不完整。
 
 ## 配置
 

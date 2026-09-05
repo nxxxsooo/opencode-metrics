@@ -99,7 +99,7 @@ Click the header badge to toggle:
 - **▼ Expanded** — full breakdown: Speed, Elapsed, TTFT, Tokens, Cache, Session.
 - **▶ Collapsed** — compact glance: **Speed + Tokens**.
 
-Speed never goes blank: `live` is a rolling observable rate, `~avg` is the current turn's estimated average, and `avg` is a finalized or retained prior-turn average. A new turn retains the previous average and token values while marked `running · waiting`; its first output replaces them. A session with no measurement yet shows `待测` rather than inventing `0 t/s`. Token `~` marks an estimate and cache `+` marks partial tree data.
+Speed never goes blank: `live` is a rolling observable rate, `~avg` is the current turn's estimated average, and `avg` is a finalized or retained prior-turn average. A new turn retains the previous average and token values while marked `running · waiting`; its first output replaces them. A session with no measurement yet shows `pending` rather than inventing `0 t/s`. Token `~` marks an estimate and cache `+` marks partial tree data.
 
 ## Configuration
 

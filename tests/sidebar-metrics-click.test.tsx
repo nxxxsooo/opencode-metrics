@@ -50,7 +50,7 @@ describe("SidebarMetrics", () => {
         expect(formatSpeedValue(base)).toBe("42.1 t/s live")
         expect(formatSpeedValue({ ...base, liveTps: null, isStreaming: false })).toBe("38.6 t/s ~avg")
         expect(formatSpeedValue({ ...base, liveTps: null, averageTps: null, outputTokens: 0 })).toBe("37.9 t/s avg")
-        expect(formatSpeedValue(null)).toBe("待测")
+        expect(formatSpeedValue(null)).toBe("pending")
         expect(formatSpeedValue({ ...base, liveTps: null, isComplete: true, completeTime: 1000 })).toBe("38.6 t/s avg")
     })
 
@@ -243,7 +243,7 @@ describe("SidebarMetrics", () => {
         try {
             await setup.flush()
             expect(setup.captureCharFrame()).toContain("Speed")
-            expect(setup.captureCharFrame()).toContain("待测")
+            expect(setup.captureCharFrame()).toContain("pending")
             expect(setup.captureCharFrame()).toContain("Tokens")
 
             aggregate = {

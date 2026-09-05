@@ -34,7 +34,7 @@ export function formatSpeedValue(
         return `${aggregate.averageTps.toFixed(1)} t/s ${aggregate.isComplete ? "avg" : "~avg"}`
     }
     const previous = aggregate?.previousAverageTps ?? fallbackAverageTps
-    return previous === null ? "待测" : `${previous.toFixed(1)} t/s avg`
+    return previous === null ? "pending" : `${previous.toFixed(1)} t/s avg`
 }
 
 export function SidebarMetrics(props: SidebarMetricsProps) {
