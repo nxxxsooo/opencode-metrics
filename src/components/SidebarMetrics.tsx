@@ -23,6 +23,20 @@ interface SidebarMetricsProps {
     requestRender?: () => void
 }
 
+export function formatSpeedValue(
+    aggregate: MetricsAggregate | null,
+    fallbackAverageTps: number | null = null,
+): string {
+    if (aggregate?.liveTps !== null && aggregate?.liveTps !== undefined) {
+        return `${aggregate.liveTps.toFixed(1)} t/s live`
+    }
+    if (aggregate?.averageTps !== null && aggregate?.averageTps !== undefined) {
+        return `${aggregate.averageTps.toFixed(1)} t/s ${aggregate.isComplete ? "avg" : "~avg"}`
+    }
+    const previous = aggregate?.previousAverageTps ?? fallbackAverageTps
+    return previous === null ? "待测" : `${previous.toFixed(1)} t/s avg`
+}
+
 export function SidebarMetrics(props: SidebarMetricsProps) {
     let disposed = false
     let refreshQueued = false
@@ -87,16 +101,31 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
         return props.controller.collapsed()
     })
     const headerLabel = () => props.controller.prefs().section.label
+    const headerStatus = () => {
+        const aggregate = currentAggregate()
+        return aggregate && !aggregate.isComplete && aggregate.outputTokens === 0 ? " · running · waiting" : ""
+    }
     const toggleCollapsed = () => props.controller.toggleCollapsed()
     const attachBoxToggle = (node: BoxRenderable) => {
         node.onMouseDown = toggleCollapsed
     }
     const currentScope = () => props.controller.prefs().scope
-    const currentAggregate = () => props.collector.getAggregate(props.sessionID, currentScope())
+    let lastSettledAggregate: MetricsAggregate | null = null
+    const currentAggregate = () => {
+        const aggregate = props.collector.getAggregate(props.sessionID, currentScope())
+        if (aggregate?.isComplete && aggregate.outputTokens > 0) lastSettledAggregate = aggregate
+        return aggregate
+    }
+    const valuesAggregate = () => {
+        const current = currentAggregate()
+        return current && !current.isComplete && current.outputTokens === 0 && lastSettledAggregate
+            ? lastSettledAggregate
+            : current
+    }
     const hasAggregate = () => currentAggregate() !== null
     const expandedActive = () => !collapsed() && hasAggregate()
     const expandedIdle = () => !collapsed() && !hasAggregate()
-    const collapsedActive = () => collapsed() && hasAggregate()
+    const collapsedSummary = () => collapsed()
     const frozenNow = (): number => {
         const m = currentAggregate()
         if (!m) return performance.now()
@@ -104,7 +133,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
     }
     const speedValue = () => {
         const m = currentAggregate()
-        return m?.liveTps === null || m?.liveTps === undefined ? "—" : `${m.liveTps.toFixed(1)} t/s`
+        return formatSpeedValue(m, lastSettledAggregate?.averageTps ?? null)
     }
     const elapsedValue = () => {
         const m = currentAggregate()
@@ -115,13 +144,14 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
         return ttft !== null ? formatDuration(ttft) : "--"
     }
     const tokenValue = () => {
-        const m = currentAggregate()
+        const m = valuesAggregate()
+        if (!m) return "—"
         const inputTokens = m?.inputTokens ?? 0
         const outputTokens = m?.outputTokens ?? 0
-        return `${rowVisible("input") ? `↓ ${formatTokens(inputTokens)} in` : ""}${rowVisible("input") && rowVisible("output") ? "  " : ""}${rowVisible("output") ? `↑ ${formatTokens(outputTokens)} out` : ""}`
+        return `${rowVisible("input") ? `↓ ${m.inputIsEstimated ? "~" : ""}${formatTokens(inputTokens)} in` : ""}${rowVisible("input") && rowVisible("output") ? "  " : ""}${rowVisible("output") ? `↑ ${m.outputIsEstimated ? "~" : ""}${formatTokens(outputTokens)} out` : ""}`
     }
     const cacheValue = () => {
-        const m = currentAggregate()
+        const m = valuesAggregate()
         return formatCacheRead(m?.cacheReadTokens ?? 0, m?.cacheReadCompleteness ?? "unknown")
     }
     const sessionValue = () => {
@@ -143,7 +173,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                 <text
                     fg={props.theme.text}
                 >
-                    <b>{collapsed() ? "▶ " : "▼ "}{headerLabel()}</b>
+                    <b>{collapsed() ? "▶ " : "▼ "}{headerLabel()}</b>{headerStatus()}
                 </text>
             </box>
 
@@ -165,7 +195,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                         accent
                         icon="⚡"
                         registerSync={registerRowSync}
-                        visible={expandedActive}
+                        visible={() => !collapsed()}
                     />
                 )}
                 {rowVisible("elapsed") && (
@@ -174,16 +204,6 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                         label="Elapsed"
                         value={elapsedValue}
                         icon="▹"
-                        registerSync={registerRowSync}
-                        visible={expandedActive}
-                    />
-                )}
-                {rowVisible("ttft") && (
-                    <StatRow
-                        theme={props.theme}
-                        label="TTFT"
-                        value={ttftValue}
-                        icon="⏱"
                         registerSync={registerRowSync}
                         visible={expandedActive}
                     />
@@ -208,12 +228,24 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                         visible={expandedActive}
                     />
                 )}
+                {rowVisible("ttft") && (
+                    <StatRow
+                        theme={props.theme}
+                        label="TTFT"
+                        value={ttftValue}
+                        icon="⏱"
+                        dim
+                        registerSync={registerRowSync}
+                        visible={expandedActive}
+                    />
+                )}
                 {rowVisible("session") && (
                     <StatRow
                         theme={props.theme}
                         label="Session"
                         value={sessionValue}
                         icon="◷"
+                        dim
                         registerSync={registerRowSync}
                         visible={expandedActive}
                     />
@@ -226,17 +258,16 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                         accent
                         icon="⚡"
                         registerSync={registerRowSync}
-                        visible={collapsedActive}
+                        visible={collapsedSummary}
                     />
                 )}
-                {rowVisible("session") && (
+                {(rowVisible("input") || rowVisible("output")) && (
                     <StatRow
                         theme={props.theme}
-                        label="Session"
-                        value={sessionValue}
-                        icon="◷"
+                        label="Tokens"
+                        value={tokenValue}
                         registerSync={registerRowSync}
-                        visible={collapsedActive}
+                        visible={collapsedSummary}
                     />
                 )}
             </box>

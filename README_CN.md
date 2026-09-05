@@ -22,9 +22,9 @@
 
 ## 从 npm 安装
 
-将包加入 O2 CLI 插件配置：
+先通过你实际使用的启动命令运行 `opencode2 debug paths`，以输出的 **config** 目录为准；启动脚本可能通过 `OPENCODE_CONFIG_DIR` 改写默认目录。在 `<config>/cli.json` 中加入插件，保留其他设置：
 
-```json
+```jsonc
 // ~/.config/opencode/cli.json
 {
   "plugins": ["opencode-metrics"]
@@ -33,35 +33,22 @@
 
 配置后新开一个 O2 TUI 窗口；CLI 插件只在启动时加载，不会热重载，也无需重启 OpenCode 服务。
 
-<details>
-<summary>手动配置</summary>
-
-把 npm 包名加入 OpenCode TUI 的 plugin 列表：
-
-```jsonc
-// ~/.config/opencode/tui.jsonc
-{
-  "plugin": ["opencode-metrics"]
-}
-```
-
-然后新开一个 TUI 窗口或重新 attach。OpenCode 会自动安装并缓存 npm 包。
-
-</details>
+这是 O2 官方配置方式，但本版本尚未完成干净环境下的 npm 安装／更新闭环验证，不能假定重开就会获取最新版。已验证的本地源码方式见下文，证据与限制见[排障记录](TROUBLESHOOTING.md)。
 
 ## 为什么是侧边栏，而不是底部状态栏
 
 底部状态栏只保留**一份**请求视图。在 `opencode serve` 下，多个 attach 的会话会同时运行 —— 所以全局状态栏显示的是汇总或错会话的数字。
 
-`opencode-metrics` 把每个请求按 `sessionID` 记录，并只渲染 OpenCode 传给 `sidebar_content` slot 的当前 `session_id`。**你永远看到的是自己这个会话。**
+`opencode-metrics` 按 `sessionID` 记录请求，并渲染 O2 传给 `sidebar.content` slot 的会话。
 
 ## 兼容性
 
 | OpenCode 版本线 | 状态 | 证据 |
 |---|---|---|
-| O2 beta | 正式支持 | 基于当前 `@opencode-ai/plugin@beta` CLI 插件契约构建，并在 O2 TUI 中完成 smoke test |
+| O2 beta（`0.0.0-beta-19086`） | 已确认本地加载与显示 | 全局发现入口导入本地源码，用户确认 Metrics 出现 |
+| OpenCode V1 | `0.3.x` 不支持 | `0.3.x` 已迁移至 O2 插件 API；旧入口请保留 `0.2.x` |
 
-插件通过能力探测适配宿主，不根据版本字符串猜接口。它优先读取 TUI 内存中的会话状态，历史消息和子会话发现不可用时回退到公开 session client；这些历史能力都不可用时，实时事件指标仍可工作。缺失数据保持不可用（`—`），不会伪造；没有可验证父子关系的会话也不会被并入 tree scope。
+O2 适配器使用 `Plugin.define`、`context.data` 事件与缓存数据，以及 `context.ui.slot`，通过宿主数据 API 同步缺失历史。自动化测试通过不代表当前 O2 的实时数值、并发隔离和真实子会话聚合已验证，这些运行时检查仍待完成。六月的旧 `tui-v2` candidate 不能证明当前 O2 API 兼容。
 
 OpenCode Desktop 不是本 CLI 插件支持的渲染面。
 
@@ -71,7 +58,7 @@ OpenCode Desktop 不是本 CLI 插件支持的渲染面。
 
 | 行 | 含义 |
 |-----|---------|
-| **Speed** | 短滚动窗口内可观测的实时每秒 token 数；没有流式 delta 时显示 `—`（`⚡`） |
+| **Speed** | 有 delta 时显示滚动窗口实时吞吐；暂停时显示本轮估算均速；空闲时显示最终均速（`⚡`） |
 | **Elapsed** | 前台 turn 的墙钟时间，完成时冻结（`▹`） |
 | **TTFT** | 前台最新 provider step 到首个可观测 delta 的耗时（`⏱`） |
 | **Tokens** | 最新上下文输入 + 当前 turn 累计的 finalized／live 输出：`↓ in  ↑ out` |
@@ -110,9 +97,9 @@ Tree 模式刻意保守：
 点击标题徽标切换：
 
 - **▼ 展开** —— 完整明细：Speed、Elapsed、TTFT、Tokens、Cache、Session。
-- **▶ 折叠** —— 紧凑速览：只有 **Speed + Session**（空闲时只剩标题）。
+- **▶ 折叠** —— 紧凑速览：**Speed + Tokens**。
 
-请求结束后，token 与计时总数会保留到下一次请求开始。两秒内没有新的可观测 delta 时，Speed 会变成 `—`，不会冻结一个过期吞吐值。
+Speed 不再留空：`live` 表示滚动窗口可观测速率，`~avg` 表示本轮估算均速，`avg` 表示最终或保留的上一轮均速。新一轮等待首个输出时保留上一轮均速和 token，并标记 `running · waiting`；首个输出到来后替换。尚无任何读数的新会话显示「待测」，不会伪造 `0 t/s`。token 的 `~` 表示估算，cache 的 `+` 表示 tree 数据不完整。
 
 ## 配置
 
@@ -122,8 +109,6 @@ Tree 模式刻意保守：
 // ~/.config/opencode/tui-preferences.jsonc
 {
   "opencode-metrics": {
-    "order": 160,          // 侧边栏位置（OpenCode 内置占 100-500）
-    "forceToTop": false,   // 排到普通区段之上
     "scope": "current",    // current | tree
     "section": {
       "enabled": true,
@@ -154,8 +139,9 @@ bun run init:prefs
 ```text
 目标：把 opencode-metrics 装进用户的 OpenCode O2 TUI。
 
-1. 在 ~/.config/opencode/cli.json 的 "plugins" 数组加入
-   "opencode-metrics"，不要删除其他插件条目。
+1. 使用用户实际启动命令运行 opencode2 debug paths。
+   在 <config>/cli.json 的 "plugins" 数组加入 "opencode-metrics"，
+   不要删除其他插件条目。这条 npm 安装路径仍需运行时验证。
 2. 不要加版本后缀；"opencode-metrics" 解析为 latest。
 3. 让用户开一个新的 O2 TUI 窗口 —— 插件只在 TUI 启动时加载，
    不会热重载。不要重启 OpenCode 服务。
@@ -177,13 +163,17 @@ bun run init:prefs
 
 ## 本地开发
 
-把 plugin 条目指向本地 checkout，而不是包：
+在 checkout 中执行 `bun install --frozen-lockfile`。以 `opencode2 debug paths` 输出为准，创建 `<config>/plugins/opencode-metrics/tui.ts`：
 
-```jsonc
-{
-  "plugin": ["file:///absolute/path/to/opencode-metrics/src/tui.tsx"]
-}
+```ts
+export { default } from "/absolute/path/to/opencode-metrics/src/tui.tsx"
 ```
+
+将占位路径替换为你的 checkout 路径。这条全局发现路径已在本机验证，不要同时通过发现目录和 `cli.json` 重复启用。启动新的 O2 客户端后检查真实侧边栏，而不是会话历史中的文字。
+
+本地安装更新：拉取目标 revision、安装依赖、重开客户端；它不会跟随 npm 发版。卸载时仅删除这个发现入口文件（npm 安装则移除对应 CLI 条目），不要清理数据库或无关缓存。
+
+从 `0.3.1` 起，插件 prepend 到 `sidebar.content`，旧 `order` 和 `forceToTop` 不再影响位置。偏好默认路径为 `~/.config/opencode/tui-preferences.jsonc`，但优先遵循 `OPENCODE_TUI_PREFERENCES_FILE`、其次 `OPENCODE_CONFIG_DIR`、然后 `XDG_CONFIG_HOME`。运行时指标配置另有路径规则，见 `src/config.ts`。
 
 检查：
 

@@ -22,9 +22,9 @@ English · [简体中文](./README_CN.md)
 
 ## Install from npm
 
-Add the package to the O2 CLI plugin configuration:
+First run `opencode2 debug paths` using the same launcher as your TUI. Use its **config** directory, which may be overridden by `OPENCODE_CONFIG_DIR`. Add the package to `<config>/cli.json`, preserving other settings:
 
-```json
+```jsonc
 // ~/.config/opencode/cli.json
 {
   "plugins": ["opencode-metrics"]
@@ -33,35 +33,22 @@ Add the package to the O2 CLI plugin configuration:
 
 Open a new O2 TUI window after installation; CLI plugins are loaded at startup and are not hot-reloaded. No server restart is required.
 
-<details>
-<summary>Manual configuration</summary>
-
-Add the npm package name to your OpenCode TUI plugin list:
-
-```jsonc
-// ~/.config/opencode/tui.jsonc
-{
-  "plugin": ["opencode-metrics"]
-}
-```
-
-Open a new TUI window or attach. OpenCode installs and caches the npm package automatically.
-
-</details>
+This is the official O2 configuration route, but a clean npm install/update cycle has **not yet been verified for this release**. Do not assume reopening fetches the latest package. The verified local-source alternative is below; see [Troubleshooting](TROUBLESHOOTING.md) for evidence and limitations.
 
 ## Why a sidebar, not a footer bar
 
 A global footer-style status line keeps **one** request view. Under `opencode serve`, several attached sessions run at once — so a global bar shows aggregate or wrong-session numbers.
 
-`opencode-metrics` stores every request keyed by `sessionID` and renders only the active `session_id` that OpenCode passes to its `sidebar_content` slot. **You always see your own session.**
+`opencode-metrics` stores requests keyed by `sessionID` and renders the session passed to O2's `sidebar.content` slot.
 
 ## Compatibility
 
 | OpenCode line | Status | Evidence |
 |---|---|---|
-| O2 beta | Supported | Built against the current `@opencode-ai/plugin@beta` CLI plugin contract and smoke-tested in the O2 TUI |
+| O2 beta (`0.0.0-beta-19086`) | Local loading and display confirmed | Global discovery entry importing local source; user confirmed Metrics appeared |
+| OpenCode V1 | Not supported by `0.3.x` | `0.3.x` migrates to the O2 plugin API; retain `0.2.x` for the legacy entry |
 
-The plugin detects host capabilities rather than switching behavior from a version string. It prefers the TUI's in-memory session state, falls back to the public session client for history and child discovery, and keeps live metrics working when those historical APIs are unavailable. Missing data stays unavailable (`—`) instead of being guessed, and sessions without a verified parent relationship are never folded into tree scope.
+The O2 adapter uses `Plugin.define`, `context.data` events and cached session data, and `context.ui.slot`. It synchronizes missing history through the host data API. Automated tests passing does not establish current-O2 live metric accuracy, concurrent session isolation, or real child-tree aggregation; those runtime checks remain open. The old June `tui-v2` candidate is not evidence for today's O2 API.
 
 OpenCode Desktop is not a supported rendering surface for this CLI plugin.
 
@@ -71,7 +58,7 @@ For the **current** session, during and after a request:
 
 | Row | Meaning |
 |-----|---------|
-| **Speed** | observable real-time tokens per second over a short rolling window; `—` while no stream is producing deltas (`⚡`) |
+| **Speed** | rolling live throughput while deltas arrive; current-turn estimated average during pauses; finalized average while idle (`⚡`) |
 | **Elapsed** | foreground-turn wall time, freezes on completion (`▹`) |
 | **TTFT** | latest foreground provider step to first observable delta (`⏱`) |
 | **Tokens** | latest context input + turn-cumulative finalized/live output on one line — `↓ in  ↑ out` |
@@ -110,9 +97,9 @@ Tree mode is intentionally conservative:
 Click the header badge to toggle:
 
 - **▼ Expanded** — full breakdown: Speed, Elapsed, TTFT, Tokens, Cache, Session.
-- **▶ Collapsed** — compact glance: **Speed + Session** only (or just the header when idle).
+- **▶ Collapsed** — compact glance: **Speed + Tokens**.
 
-When a request finishes, token and timing totals stay visible until the next request. Speed becomes `—` as soon as no observable delta has arrived for two seconds; it never freezes a stale throughput value.
+Speed never goes blank: `live` is a rolling observable rate, `~avg` is the current turn's estimated average, and `avg` is a finalized or retained prior-turn average. A new turn retains the previous average and token values while marked `running · waiting`; its first output replaces them. A session with no measurement yet shows `待测` rather than inventing `0 t/s`. Token `~` marks an estimate and cache `+` marks partial tree data.
 
 ## Configuration
 
@@ -122,8 +109,6 @@ Presentation preferences live in the shared `tui-preferences.jsonc` (same file M
 // ~/.config/opencode/tui-preferences.jsonc
 {
   "opencode-metrics": {
-    "order": 160,          // sidebar position (OpenCode built-ins occupy 100-500)
-    "forceToTop": false,   // sort above the normal band
     "scope": "current",    // current | tree
     "section": {
       "enabled": true,
@@ -154,8 +139,9 @@ If you are an AI coding agent installing this for a user, the full procedure is:
 ```text
 GOAL: install opencode-metrics into the user's OpenCode O2 TUI.
 
-1. Add "opencode-metrics" to the "plugins" array in
-   ~/.config/opencode/cli.json without removing sibling entries.
+1. Run opencode2 debug paths through the user's actual launcher.
+   Add "opencode-metrics" to <config>/cli.json's "plugins" array,
+   preserving sibling entries. This npm route still needs runtime verification.
 2. Do NOT add a version suffix; "opencode-metrics" resolves latest.
 3. Tell the user to open a NEW O2 TUI window — plugins load at TUI
    startup and are not hot-reloaded. Do not restart the OpenCode server.
@@ -178,13 +164,17 @@ NOTES:
 
 ## Local development
 
-Point the plugin entry at a local checkout instead of the package:
+Install dependencies in your checkout with `bun install --frozen-lockfile`. Create `<config>/plugins/opencode-metrics/tui.ts` using the config directory from `opencode2 debug paths`:
 
-```jsonc
-{
-  "plugin": ["file:///absolute/path/to/opencode-metrics/src/tui.tsx"]
-}
+```ts
+export { default } from "/absolute/path/to/opencode-metrics/src/tui.tsx"
 ```
+
+Replace the placeholder with your checkout path. This global discovery route was verified locally. Avoid enabling the same plugin through both discovery and `cli.json`. Start a new O2 client process and verify the actual sidebar, not text in conversation history.
+
+To update a local checkout, pull the intended revision, reinstall dependencies, and restart the client; it does not follow npm releases. To uninstall, remove only this discovery file (or the matching CLI entry for an npm install). Do not clear databases or unrelated caches.
+
+Since `0.3.1`, the plugin prepends to `sidebar.content`; legacy `order` and `forceToTop` preferences do not affect placement. Preferences default to `~/.config/opencode/tui-preferences.jsonc`, but honor `OPENCODE_TUI_PREFERENCES_FILE`, then `OPENCODE_CONFIG_DIR`, then `XDG_CONFIG_HOME`. Runtime metric settings have a separate path policy in `src/config.ts`.
 
 Checks:
 

@@ -1,5 +1,5 @@
-import type { RequestMetrics } from "./types"
-import { createFreshMetrics } from "./metrics"
+import type { CompletedSpeed, RequestMetrics } from "./types"
+import { createFreshMetrics, getDisplayOutputTokens } from "./metrics"
 import { applySessionModel } from "./request-updates"
 import { clearLiveSpeed, resetLiveSpeed } from "./live-speed"
 import { completeTurn, ensureTurn, retireRequestIntoTurn, startTurn } from "./turn-state"
@@ -9,6 +9,7 @@ export interface RequestState {
   readonly requests: Map<string, RequestMetrics>
   readonly turns: Map<string, TurnMetrics>
   readonly liveSpeeds: Map<string, LiveSpeedState>
+  readonly completedSpeeds: Map<string, CompletedSpeed>
   readonly sessionModels: Map<string, { readonly modelID: string; readonly providerID: string }>
   lastRequestSessionID: string | null
 }
@@ -74,6 +75,17 @@ export function completeRequest(input: CompleteRequestInput): void {
   const turn = input.state.turns.get(input.sessionID)
   if (current && turn) retireRequestIntoTurn(turn, current)
   if (turn) completeTurn(turn, input.now)
+  if (current) {
+    const outputTokens = turn?.finalizedOutputTokens ?? getDisplayOutputTokens(current)
+    const startedAt = turn?.turnStartTime ?? current.requestStartTime
+    const elapsedMs = input.now - startedAt
+    if (outputTokens > 0 && elapsedMs > 0) {
+      input.state.completedSpeeds.set(input.sessionID, {
+        tps: Math.round((outputTokens / (elapsedMs / 1000)) * 10) / 10,
+        completedAt: input.now,
+      })
+    }
+  }
   clearLiveSpeed(input.state.liveSpeeds, input.sessionID)
   if (!current) return
   current.isStreaming = false

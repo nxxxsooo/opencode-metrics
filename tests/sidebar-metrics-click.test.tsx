@@ -4,14 +4,13 @@ import { describe, expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { MouseButtons } from "@opentui/core/testing"
-import { SidebarMetrics } from "../src/components/SidebarMetrics"
+import { formatSpeedValue, SidebarMetrics } from "../src/components/SidebarMetrics"
 import { StatRow } from "../src/components/StatRow"
 import { DEFAULT_CONFIG } from "../src/types"
 import { DEFAULT_PREFS } from "../src/tui-preferences"
 import type { MetricsCollector, MetricsListener } from "../src/collector"
-import type { MetricsAggregate } from "../src/types"
+import type { MetricsAggregate, MetricsTheme } from "../src/types"
 import type { MetricsSidebarController } from "../src/tui-preferences"
-import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 
 const collector: MetricsCollector = {
     getCurrent: () => null,
@@ -22,73 +21,39 @@ const collector: MetricsCollector = {
     dispose: () => {},
 }
 
-function createTheme(): TuiThemeCurrent {
+function createTheme(): MetricsTheme {
     const white = RGBA.fromHex("#ffffff")
     const muted = RGBA.fromHex("#888888")
     const cyan = RGBA.fromHex("#00ffff")
     const yellow = RGBA.fromHex("#ffff00")
     const green = RGBA.fromHex("#00ff00")
-    const red = RGBA.fromHex("#ff0000")
-    const black = RGBA.fromHex("#000000")
-
     return {
-        primary: cyan,
-        secondary: muted,
         accent: cyan,
-        error: red,
         warning: yellow,
         success: green,
-        info: cyan,
         text: white,
         textMuted: muted,
-        selectedListItemText: black,
-        background: black,
-        backgroundPanel: black,
-        backgroundElement: black,
-        backgroundMenu: black,
-        border: muted,
-        borderActive: cyan,
-        borderSubtle: muted,
-        diffAdded: green,
-        diffRemoved: red,
-        diffContext: white,
-        diffHunkHeader: cyan,
-        diffHighlightAdded: green,
-        diffHighlightRemoved: red,
-        diffAddedBg: black,
-        diffRemovedBg: black,
-        diffContextBg: black,
-        diffLineNumber: muted,
-        diffAddedLineNumberBg: black,
-        diffRemovedLineNumberBg: black,
-        markdownText: white,
-        markdownHeading: cyan,
-        markdownLink: cyan,
-        markdownLinkText: cyan,
-        markdownCode: yellow,
-        markdownBlockQuote: muted,
-        markdownEmph: white,
-        markdownStrong: white,
-        markdownHorizontalRule: muted,
-        markdownListItem: white,
-        markdownListEnumeration: cyan,
-        markdownImage: cyan,
-        markdownImageText: white,
-        markdownCodeBlock: black,
-        syntaxComment: muted,
-        syntaxKeyword: cyan,
-        syntaxFunction: green,
-        syntaxVariable: white,
-        syntaxString: green,
-        syntaxNumber: yellow,
-        syntaxType: cyan,
-        syntaxOperator: white,
-        syntaxPunctuation: white,
-        thinkingOpacity: 0.65,
     }
 }
 
 describe("SidebarMetrics", () => {
+    test("speed transitions from live to current average to retained average without blanking", () => {
+        const base: MetricsAggregate = {
+            sessionIDs: ["ses_test"], childSessionCount: 0,
+            inputTokens: 10, outputTokens: 20, cacheReadTokens: 0,
+            cacheReadCompleteness: "unknown", requestStartTime: 0,
+            firstTokenTime: 100, completeTime: null, ttft: 100,
+            liveTps: 42.1, averageTps: 38.6, previousAverageTps: 37.9,
+            inputIsEstimated: false, outputIsEstimated: true,
+            isStreaming: true, isComplete: false,
+        }
+        expect(formatSpeedValue(base)).toBe("42.1 t/s live")
+        expect(formatSpeedValue({ ...base, liveTps: null, isStreaming: false })).toBe("38.6 t/s ~avg")
+        expect(formatSpeedValue({ ...base, liveTps: null, averageTps: null, outputTokens: 0 })).toBe("37.9 t/s avg")
+        expect(formatSpeedValue(null)).toBe("待测")
+        expect(formatSpeedValue({ ...base, liveTps: null, isComplete: true, completeTime: 1000 })).toBe("38.6 t/s avg")
+    })
+
     test("a retained row sync is inert after the renderer is destroyed", async () => {
         // Given: an in-flight collector dispatch retained a row callback while the TUI exits.
         let retainedSync: (() => void) | undefined
@@ -218,6 +183,10 @@ describe("SidebarMetrics", () => {
                 completeTime: null,
                 ttft: null,
                 liveTps: 32.4,
+                averageTps: 3.3,
+                previousAverageTps: null,
+                inputIsEstimated: false,
+                outputIsEstimated: false,
                 isStreaming: false,
                 isComplete: true,
             }
@@ -231,7 +200,7 @@ describe("SidebarMetrics", () => {
         }
     })
 
-    test("collapsed sidebar shows compact speed and session rows only when active", async () => {
+    test("collapsed sidebar always shows compact speed and token rows", async () => {
         // Given: a collapsed sidebar has no request yet.
         let listener: MetricsListener | null = null
         let aggregate: MetricsAggregate | null = null
@@ -273,8 +242,9 @@ describe("SidebarMetrics", () => {
 
         try {
             await setup.flush()
-            expect(setup.captureCharFrame()).not.toContain("Speed")
-            expect(setup.captureCharFrame()).not.toContain("Tokens")
+            expect(setup.captureCharFrame()).toContain("Speed")
+            expect(setup.captureCharFrame()).toContain("待测")
+            expect(setup.captureCharFrame()).toContain("Tokens")
 
             aggregate = {
                 sessionIDs: ["ses_runtime"],
@@ -288,16 +258,20 @@ describe("SidebarMetrics", () => {
                 completeTime: null,
                 ttft: null,
                 liveTps: null,
+                averageTps: 3.3,
+                previousAverageTps: null,
+                inputIsEstimated: false,
+                outputIsEstimated: false,
                 isStreaming: false,
                 isComplete: true,
             }
             listener?.()
 
-            const frame = await setup.waitForFrame((value) => value.includes("Speed") && value.includes("Session"))
-            expect(frame).not.toContain("Tokens")
+            const frame = await setup.waitForFrame((value) => value.includes("3.3 t/s avg") && value.includes("Tokens"))
+            expect(frame).not.toContain("Session")
             expect(frame).not.toContain("Elapsed")
             expect(frame).not.toContain("TTFT")
-            expect(frame).toContain("—")
+            expect(frame).toContain("3.3 t/s avg")
         } finally {
             setup.renderer.destroy()
         }

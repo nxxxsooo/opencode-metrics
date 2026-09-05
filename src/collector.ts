@@ -31,6 +31,7 @@ export function createCollector(
     requests: new Map(),
     turns: new Map(),
     liveSpeeds: new Map(),
+    completedSpeeds: new Map(),
     holdTimers: new Map(),
     sessionTree: createSessionTree(),
     sessionModels: new Map(),
@@ -320,6 +321,11 @@ export function createCollector(
       const firstTokenTime = foregroundRequest?.firstTokenTime ?? null
       const isComplete = foregroundTurn?.isComplete ?? foregroundRequest?.isComplete ?? false
       const completeTime = foregroundTurn?.completeTime ?? foregroundRequest?.completeTime ?? null
+      const averageEndTime = isComplete ? completeTime ?? now : now
+      const averageElapsedMs = averageEndTime - requestStartTime
+      const averageTps = outputTokens > 0 && averageElapsedMs > 0
+        ? Math.round((outputTokens / (averageElapsedMs / 1000)) * 10) / 10
+        : null
 
       return {
         sessionIDs: contributingSessionIDs.length > 0 ? contributingSessionIDs : [rootID],
@@ -333,6 +339,16 @@ export function createCollector(
         completeTime: isComplete ? completeTime ?? now : null,
         ttft: foregroundRequest ? getTtft(foregroundRequest) : null,
         liveTps: liveRateCount > 0 ? Math.round(liveTps * 10) / 10 : null,
+        averageTps,
+        previousAverageTps: state.completedSpeeds.get(rootID)?.tps ?? null,
+        inputIsEstimated: contributingSessionIDs.some((id) => {
+          const request = state.requests.get(id)
+          return Boolean(request && !request.hasExactTokens && getDisplayInputTokens(request) > 0)
+        }),
+        outputIsEstimated: contributingSessionIDs.some((id) => {
+          const request = state.requests.get(id)
+          return Boolean(request && !request.hasExactTokens && getDisplayOutputTokens(request) > 0)
+        }),
         isStreaming,
         isComplete,
       }
@@ -360,6 +376,7 @@ export function createCollector(
       state.requests.clear()
       state.turns.clear()
       state.liveSpeeds.clear()
+      state.completedSpeeds.clear()
       state.sessionTree.clear()
       state.sessionModels.clear()
       state.sessionTimings.clear()

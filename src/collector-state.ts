@@ -1,4 +1,4 @@
-import type { BarConfig, LiveSpeedState, RequestMetrics, TurnMetrics } from "./types"
+import type { BarConfig, CompletedSpeed, LiveSpeedState, RequestMetrics, TurnMetrics } from "./types"
 import type { SessionTree } from "./session-tree"
 import type { MetricsEventApi } from "./event-bus"
 import type { SessionTiming } from "./session-timing"
@@ -7,6 +7,7 @@ export interface CollectorState {
   requests: Map<string, RequestMetrics>
   turns: Map<string, TurnMetrics>
   liveSpeeds: Map<string, LiveSpeedState>
+  completedSpeeds: Map<string, CompletedSpeed>
   holdTimers: Map<string, ReturnType<typeof setTimeout>>
   sessionTree: SessionTree
   sessionModels: Map<string, { readonly modelID: string; readonly providerID: string }>

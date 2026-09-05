@@ -51,6 +51,36 @@ function createEventHarness() {
 }
 
 describe("collector session.next events", () => {
+  test("keeps the completed average available while the next turn waits for output", async () => {
+    const harness = createEventHarness()
+    const collector = createCollector(harness.api, DEFAULT_CONFIG, () => {})
+
+    harness.emit("session.next.step.started", {
+      sessionID: "ses_speed",
+      assistantMessageID: "msg_first",
+    })
+    await Bun.sleep(10)
+    harness.emit("session.next.step.ended", {
+      sessionID: "ses_speed",
+      assistantMessageID: "msg_first",
+      tokens: { input: 20, output: 10, reasoning: 0, cache: { read: 0, write: 0 } },
+    })
+    harness.emit("session.status", { sessionID: "ses_speed", status: { type: "idle" } })
+
+    const completed = collector.getAggregate("ses_speed", "current")
+    expect(completed?.averageTps).toBeGreaterThan(0)
+    expect(completed?.isComplete).toBe(true)
+
+    harness.emit("session.status", { sessionID: "ses_speed", status: { type: "busy" } })
+    const waiting = collector.getAggregate("ses_speed", "current")
+    expect(waiting?.liveTps).toBeNull()
+    expect(waiting?.averageTps).toBeNull()
+    expect(waiting?.previousAverageTps).toBe(completed?.averageTps)
+    expect(waiting?.outputTokens).toBe(0)
+
+    collector.dispose()
+  })
+
   test("reads the direct V2 event data and durable envelope", () => {
     const harness = createEventHarness()
     const collector = createCollector(harness.api, DEFAULT_CONFIG, () => {})

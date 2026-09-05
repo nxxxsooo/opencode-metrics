@@ -75,8 +75,17 @@ export interface MetricsAggregate {
   completeTime: number | null
   ttft: number | null
   liveTps: number | null
+  averageTps: number | null
+  previousAverageTps: number | null
+  inputIsEstimated: boolean
+  outputIsEstimated: boolean
   isStreaming: boolean
   isComplete: boolean
+}
+
+export interface CompletedSpeed {
+  tps: number
+  completedAt: number
 }
 
 export interface BarConfig {

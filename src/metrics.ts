@@ -96,6 +96,12 @@ export function aggregateRequestMetrics(
     completeTime: completeTime ?? (isComplete ? now : null),
     ttft,
     liveTps: null,
+    averageTps: outputTokens > 0 && (completeTime ?? now) > requestStartTime
+      ? Math.round((outputTokens / (((completeTime ?? now) - requestStartTime) / 1000)) * 10) / 10
+      : null,
+    previousAverageTps: null,
+    inputIsEstimated: metrics.some((item) => !item.hasExactTokens && getDisplayInputTokens(item) > 0),
+    outputIsEstimated: metrics.some((item) => !item.hasExactTokens && getDisplayOutputTokens(item) > 0),
     isStreaming,
     isComplete,
   }
