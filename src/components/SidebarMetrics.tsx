@@ -222,7 +222,6 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                         theme={props.theme}
                         label="Cache"
                         value={cacheValue}
-                        dim
                         icon="○"
                         registerSync={registerRowSync}
                         visible={expandedActive}
