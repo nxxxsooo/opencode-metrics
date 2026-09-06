@@ -25,7 +25,7 @@ Use your own absolute path. Avoid duplicate registration through `cli.json`. Res
 
 **Not established:** the exact cause of the unsuccessful `cli.json` attempts. This incident does not demonstrate that the official configuration route is broken. Earlier capture matches were potentially contaminated by conversation text and should not be used as runtime evidence. Nor was sidebar placement or an old client process established as the sole cause.
 
-**Remaining validation:** clean npm install/update, live metric accuracy under the current O2 event contract, concurrent attach isolation, and real child-session aggregation. The 147 automated tests and successful build are useful regression checks, not substitutes for these runtime checks.
+**Remaining validation:** clean npm install/update, live metric accuracy under the current O2 event contract, concurrent attach isolation, and real child-session aggregation. The 149 automated tests and successful build are useful regression checks, not substitutes for these runtime checks.
 
 ## 中文摘要
 
