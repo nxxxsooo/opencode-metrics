@@ -45,10 +45,10 @@ A global footer-style status line keeps **one** request view. Under `opencode se
 
 | OpenCode line | Status | Evidence |
 |---|---|---|
-| O2 beta (`0.0.0-beta-19086`) | Local loading and display confirmed | Global discovery entry importing local source; user confirmed Metrics appeared |
+| O2 beta (`0.0.0-beta-19192`) | Local loading and live speed confirmed | Global discovery entry importing local source; real TUI stream reached `9.6 t/s live` |
 | OpenCode V1 | Not supported by `0.3.x` | `0.3.x` migrates to the O2 plugin API; retain `0.2.x` for the legacy entry |
 
-The O2 adapter uses `Plugin.define`, `context.data` events and cached session data, and `context.ui.slot`. It synchronizes missing history through the host data API. Automated tests passing does not establish current-O2 live metric accuracy, concurrent session isolation, or real child-tree aggregation; those runtime checks remain open. The old June `tui-v2` candidate is not evidence for today's O2 API.
+The O2 adapter uses `Plugin.define`, `context.data` events and cached session data, and `context.ui.slot`. It synchronizes missing history through the host data API. A real `0.0.0-beta-19192` TUI stream confirmed the Speed row transitions from `~avg` during sparse deltas to `live` during continuous output. Concurrent-session isolation and real child-tree aggregation remain runtime verification gaps. The old June `tui-v2` candidate is not evidence for today's O2 API.
 
 OpenCode Desktop is not a supported rendering surface for this CLI plugin.
 

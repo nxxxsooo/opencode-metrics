@@ -45,10 +45,10 @@
 
 | OpenCode 版本线 | 状态 | 证据 |
 |---|---|---|
-| O2 beta（`0.0.0-beta-19086`） | 已确认本地加载与显示 | 全局发现入口导入本地源码，用户确认 Metrics 出现 |
+| O2 beta（`0.0.0-beta-19192`） | 已确认本地加载与实时速度 | 全局发现入口导入本地源码；真实 TUI 流达到 `9.6 t/s live` |
 | OpenCode V1 | `0.3.x` 不支持 | `0.3.x` 已迁移至 O2 插件 API；旧入口请保留 `0.2.x` |
 
-O2 适配器使用 `Plugin.define`、`context.data` 事件与缓存数据，以及 `context.ui.slot`，通过宿主数据 API 同步缺失历史。自动化测试通过不代表当前 O2 的实时数值、并发隔离和真实子会话聚合已验证，这些运行时检查仍待完成。六月的旧 `tui-v2` candidate 不能证明当前 O2 API 兼容。
+O2 适配器使用 `Plugin.define`、`context.data` 事件与缓存数据，以及 `context.ui.slot`，通过宿主数据 API 同步缺失历史。真实 `0.0.0-beta-19192` TUI 流已确认 Speed 行会在增量稀疏时显示 `~avg`，连续输出时切换为 `live`。并发会话隔离和真实子会话聚合仍缺少运行时验证。六月的旧 `tui-v2` candidate 不能证明当前 O2 API 兼容。
 
 OpenCode Desktop 不是本 CLI 插件支持的渲染面。
 
