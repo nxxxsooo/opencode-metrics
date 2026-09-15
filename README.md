@@ -33,7 +33,51 @@ First run `opencode2 debug paths` using the same launcher as your TUI. Use its *
 
 Open a new O2 TUI window after installation; CLI plugins are loaded at startup and are not hot-reloaded. No server restart is required.
 
-This is the official O2 configuration route, but a clean npm install/update cycle has **not yet been verified for this release**. Do not assume reopening fetches the latest package. The verified local-source alternative is below; see [Troubleshooting](TROUBLESHOOTING.md) for evidence and limitations.
+For model evidence, also load the server entry below. CLI plugins alone cannot observe provider HTTP responses.
+
+## Capture raw response models
+
+Keep the CLI entry above and also load the server plugin in `opencode.jsonc`:
+
+```jsonc
+{
+  "plugins": ["opencode-metrics"]
+}
+```
+
+First install or upgrade explicitly (existing installs do not follow registry
+updates automatically):
+
+```sh
+opencode plugin add opencode-metrics@0.5.0
+```
+
+If already configured with an unpinned package name, use
+`opencode plugin update opencode-metrics`. Keep only one metrics entry per config,
+preserving other plugins. Reopen the TUI after updating: mounted CLI plugins are
+not hot-reloaded. For local development, run `bun run build` and configure the
+absolute path to the repository's `src/` directory in server config and CLI config.
+No live configuration is changed by building this repository. To roll back, pin
+`opencode-metrics@0.4.2` in CLI config and remove the new server entry.
+
+Expanded Metrics now shows **Request model**, **Response model**, and **Model
+evidence** for the foreground session's latest primary HTTP request (even in tree
+scope). Long identifiers wrap without truncation. Request model comes from the
+outgoing JSON body, not the configured alias. Response model comes from the local
+raw JSON/SSE fields `response.model`, `message.model`, or `model`. Missing evidence
+shows `unknown`; unavailable server collection is labeled explicitly. A new step
+keeps the previous reported pair explicitly labeled **Last request/response model**
+until new response evidence arrives. The last reported pair is saved in plugin
+storage per session and restored after reload/restart; active memory is bounded to
+256 sessions.
+
+This is **not verified ultimate-upstream identity**: a relay can rewrite or hide
+the returned model. Native WebSocket traffic and unsupported content types are not
+captured. Title/generate/compaction requests are excluded. Only identifiers and a
+timestamp are retained, not credentials, prompts, or response content. Streaming
+JSON parsing retains only keys and model strings, so large echoed instructions do
+not hide model evidence (maximum nesting 128, model ID 512 characters, request
+body 4 MiB). Mock HTTP-hook and sidebar tests cover collection and retention.
 
 ## Why a sidebar, not a footer bar
 
@@ -45,6 +89,7 @@ A global footer-style status line keeps **one** request view. Under `opencode se
 
 | OpenCode line | Status | Evidence |
 |---|---|---|
+| OpenCode V2 (`2.0.3`) | Raw HTTP model capture confirmed | Real Responses request produced distinct requested/reported identifiers through plugin RPC; retention and layout covered by tests |
 | O2 beta (`0.0.0-beta-19192`) | Local loading and live speed confirmed | Global discovery entry importing local source; real TUI stream reached `9.6 t/s live` |
 | OpenCode V1 | Not supported by `0.3.x` | `0.3.x` migrates to the O2 plugin API; retain `0.2.x` for the legacy entry |
 

@@ -1,25 +1,26 @@
 {
   "name": "opencode-metrics",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "OpenCode O2 CLI sidebar plugin for real-time LLM token metrics",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nxxxsooo/opencode-metrics.git"
   },
   "type": "module",
-  "main": "./src/tui.tsx",
-  "types": "./dist/tui.d.ts",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
   "exports": {
-    ".": {
-      "import": "./src/tui.tsx",
-      "types": "./dist/tui.d.ts"
-    },
-    "./tui": {
-      "import": "./src/tui.tsx",
-      "types": "./dist/tui.d.ts"
-    }
+    ".": "./dist/server.js",
+    "./tui": "./src/tui.tsx",
+    "./server": "./dist/server.js"
   },
   "files": [
+    "dist/server.js",
+    "dist/server.d.ts",
+    "dist/chunk-*.js",
+    "src/model-identity.ts",
+    "src/model-identity-rpc.ts",
+    "src/model-json-scanner.ts",
     "dist/tui.d.ts",
     "src/tui.tsx",
     "src/tui-preferences.ts",
@@ -57,7 +58,7 @@
     "typecheck": "tsc --noEmit",
     "check": "bun test && bun run typecheck && bun run build && npm pack --dry-run",
     "init:prefs": "OPENCODE_TUI_PREFERENCES_FILE=${OPENCODE_TUI_PREFERENCES_FILE:-$HOME/.config/opencode/tui-preferences.jsonc} bun run src/scripts/init-tui-preferences.ts",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "bun test && bun run typecheck && bun run build"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "beta",

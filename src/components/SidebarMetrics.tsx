@@ -12,6 +12,7 @@ import {
 } from "../metrics"
 import { StatRow } from "./StatRow"
 import type { MetricsSidebarController } from "../tui-preferences"
+import type { ModelIdentity } from "../model-identity"
 
 interface SidebarMetricsProps {
     sessionID: string
@@ -21,6 +22,8 @@ interface SidebarMetricsProps {
     theme: MetricsTheme
     controller: MetricsSidebarController
     requestRender?: () => void
+    fetchModelIdentity?: (sessionID: string) => Promise<ModelIdentity | null>
+    modelEpoch?: () => number
 }
 
 export function formatSpeedValue(
@@ -44,6 +47,11 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
     let unsub = () => {}
     let unsubController = () => {}
     const rowSyncs = new Set<() => void>()
+    let identity: ModelIdentity | null = null
+    let identityEpoch = props.modelEpoch?.() ?? 0
+    let modelPollAt = 0
+    let modelPolling = false
+    let modelUnavailable = false
     const registerRowSync = (sync: () => void) => {
         if (disposed) return () => {}
         rowSyncs.add(sync)
@@ -56,6 +64,28 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
     const [tick, setTick] = createSignal(0)
     const bump = () => {
         if (disposed) return
+        const epoch = props.modelEpoch?.() ?? 0
+        if (epoch !== identityEpoch) {
+            identityEpoch = epoch
+            if (identity) identity = { ...identity, previous: true }
+            modelPollAt = 0
+        }
+        if (props.fetchModelIdentity && rowVisible("model") && !modelPolling && Date.now() - modelPollAt >= 1000) {
+            modelPollAt = Date.now()
+            modelPolling = true
+            const pollEpoch = identityEpoch
+            void props.fetchModelIdentity(props.sessionID).then((value) => {
+                if (disposed || pollEpoch !== (props.modelEpoch?.() ?? 0)) return
+                if (value) identity = value
+                modelUnavailable = false
+            }).catch(() => {
+                if (disposed || pollEpoch !== (props.modelEpoch?.() ?? 0)) return
+                modelUnavailable = true
+            }).finally(() => {
+                modelPolling = false
+                if (!disposed) { syncRows(); props.requestRender?.() }
+            })
+        }
         setTick((t) => t + 1)
         syncRows()
         if (refreshQueued) return
@@ -124,6 +154,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
     }
     const hasAggregate = () => currentAggregate() !== null
     const expandedActive = () => !collapsed() && hasAggregate()
+    const modelVisible = () => !collapsed() && Boolean(identity || hasAggregate())
     const expandedIdle = () => !collapsed() && !hasAggregate()
     const collapsedSummary = () => collapsed()
     const frozenNow = (): number => {
@@ -259,6 +290,19 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                         registerSync={registerRowSync}
                         visible={collapsedSummary}
                     />
+                )}
+                {rowVisible("model") && (
+                    <box width="100%" flexDirection="column">
+                        <StatRow theme={props.theme} label={() => identity?.previous ? "Last request model" : "Request model"} stacked
+                            value={() => identity?.requested ?? "unknown"}
+                            visible={modelVisible} registerSync={registerRowSync} />
+                        <StatRow theme={props.theme} label={() => identity?.previous ? "Last response model" : "Response model"} stacked
+                            value={() => identity?.reported ?? "unknown"}
+                            visible={modelVisible} registerSync={registerRowSync} />
+                        <StatRow theme={props.theme} label="Model evidence" dim stacked
+                            value={() => modelUnavailable ? "collector unavailable" : identity?.source ? `${identity.previous ? "previous " : ""}HTTP ${identity.source}` : "not captured"}
+                            visible={modelVisible} registerSync={registerRowSync} />
+                    </box>
                 )}
                 {(rowVisible("input") || rowVisible("output")) && (
                     <StatRow

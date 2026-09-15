@@ -19,6 +19,22 @@ Use your own absolute path. Avoid duplicate registration through `cli.json`. Res
 
 ## Incident record — September 2026
 
+### Raw model evidence — 0.5.0
+
+- Load both the server and CLI entries. Local directory discovery works with this
+  checkout's `src/` directory; configured direct file paths were rejected by the
+  tested V2 `2.0.3` runtime.
+- A real `openai/gpt-5.6-luna` Responses request returned `OK`, and plugin RPC
+  reported a distinct full internal identifier from `response.model`.
+- The initial 64 KiB event cap skipped model fields in large response envelopes.
+  The streaming field scanner now skips content strings without retaining them.
+- Empty/pending polls must not erase the last reported model pair. Previous pairs
+  are explicitly labeled, and the last reported pair is saved per session in
+  plugin storage. Native WebSocket traffic is not captured by HTTP hooks.
+- Check RPC with `POST /api/rpc/opencode-metrics-model/get` at the session's
+  location and body `{"input":{"sessionID":"<session-id>"}}`. The raw HTTP RPC
+  response wraps the record in `output`; the typed client unwraps it.
+
 **Observed:** an isolated O2 launcher selected a non-default config directory. Earlier edits targeted the default directory. The existing `tui-v2` candidate checks covered an older API, not the current O2 beta contract. Subsequent `cli.json` attempts did not establish a successful load.
 
 **Verified mitigation:** the actual global discovery directory contained a `tui.ts` entry importing this checkout. A startup toast demonstrated setup execution; the user subsequently confirmed Metrics appeared. The diagnostic toast was removed. The host version inspected was `0.0.0-beta-19086`.

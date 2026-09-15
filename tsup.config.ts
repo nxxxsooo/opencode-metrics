@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup"
 
 export default defineConfig({
-  entry: ["src/tui.tsx"],
+  entry: ["src/tui.tsx", "src/server.ts"],
   format: ["esm"],
   dts: true,
   sourcemap: true,

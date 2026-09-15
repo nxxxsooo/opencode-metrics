@@ -37,6 +37,61 @@ function createTheme(): MetricsTheme {
 }
 
 describe("SidebarMetrics", () => {
+    test("raw model rows wrap full identifiers, reset on a new step and show unavailable collection", async () => {
+        let listener: MetricsListener | null = null
+        let epoch = 0
+        let unavailable = false
+        let idleWithoutMetrics = false
+        const model = "gpt-6-luna-exp-1p-arm2-codexswic-ev3-premium"
+        const activeCollector: MetricsCollector = {
+            ...collector,
+            getAggregate: () => idleWithoutMetrics ? null : ({
+                sessionIDs: ["ses_test"], childSessionCount: 0,
+                inputTokens: 1, outputTokens: 1, cacheReadTokens: 0,
+                cacheReadCompleteness: "unknown", requestStartTime: performance.now(),
+                firstTokenTime: null, completeTime: null, ttft: null,
+                liveTps: null, averageTps: null, previousAverageTps: null,
+                inputIsEstimated: false, outputIsEstimated: false,
+                isStreaming: true, isComplete: false,
+            }),
+            subscribe: (next) => { listener = next; return () => { listener = null } },
+        }
+        const controller: MetricsSidebarController = {
+            prefs: () => DEFAULT_PREFS, collapsed: () => false,
+            toggleCollapsed: () => {}, subscribe: () => () => {},
+        }
+        const setup = await testRender(() => (
+            <SidebarMetrics sessionID="ses_test" collector={activeCollector}
+                refreshIntervalMs={10_000} barConfig={DEFAULT_CONFIG}
+                theme={createTheme()} controller={controller} modelEpoch={() => epoch}
+                fetchModelIdentity={async () => {
+                    if (unavailable) throw new Error("missing RPC")
+                    return epoch === 0 ? { requested: "gpt-5.6-luna", reported: model, source: "response.model", observedAt: 1 } : null
+                }} />
+        ), { width: 32, height: 24 })
+        try {
+            await setup.flush()
+            listener?.()
+            const frame = await setup.waitForFrame((value) => value.includes("response.model"))
+            expect(frame.replace(/\s/g, "")).toContain(model)
+            expect(frame).toContain("gpt-5.6-luna")
+            idleWithoutMetrics = true
+            listener?.()
+            const idle = await setup.waitForFrame((value) => value.includes("No active request"))
+            expect(idle.replace(/\s/g, "")).toContain(model)
+            epoch++
+            listener?.()
+            const reset = await setup.waitForFrame((value) => value.includes("previous HTTP"))
+            expect(reset).toContain("gpt-5.6-luna")
+            expect(reset).toContain("Last response model")
+            unavailable = true
+            epoch++
+            listener?.()
+            const failed = await setup.waitForFrame((value) => value.includes("collector unavailable"))
+            expect(failed.replace(/\s/g, "")).toContain(model)
+        } finally { setup.renderer.destroy() }
+    })
+
     test("speed transitions from live to current average to retained average without blanking", () => {
         const base: MetricsAggregate = {
             sessionIDs: ["ses_test"], childSessionCount: 0,

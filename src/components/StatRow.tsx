@@ -6,7 +6,7 @@ import type { MetricsTheme } from "../types"
 
 interface StatRowProps {
     theme: MetricsTheme
-    label: string
+    label: string | (() => string)
     value: string | (() => string)
     accent?: boolean
     warning?: boolean
@@ -15,6 +15,7 @@ interface StatRowProps {
     icon?: string
     visible?: boolean | (() => boolean)
     registerSync?: (sync: () => void) => () => void
+    stacked?: boolean
 }
 
 export function StatRow(props: StatRowProps) {
@@ -31,13 +32,14 @@ export function StatRow(props: StatRowProps) {
         return props.theme.text
     }
     const value = () => typeof props.value === "function" ? props.value() : props.value
+    const label = () => typeof props.label === "function" ? props.label() : props.label
     const visible = () => typeof props.visible === "function" ? props.visible() : props.visible !== false
     const content = () => `${props.icon ? `${props.icon} ` : ""}${value()}`
     const syncContent = () => {
         if (disposed) return
         const isVisible = visible()
         if (rowNode && !rowNode.isDestroyed) rowNode.visible = isVisible
-        if (labelNode && !labelNode.isDestroyed) labelNode.content = isVisible ? props.label : ""
+        if (labelNode && !labelNode.isDestroyed) labelNode.content = isVisible ? label() : ""
         if (!valueNode || valueNode.isDestroyed) return
         valueNode.content = isVisible ? content() : ""
         valueNode.requestRender()
@@ -65,9 +67,9 @@ export function StatRow(props: StatRowProps) {
     })
 
     return (
-        <box ref={attachRowNode} width="100%" flexDirection="row" justifyContent="space-between" visible={visible()}>
-            <text ref={attachLabelNode} fg={props.theme.textMuted} content={visible() ? props.label : ""} />
-            <text ref={attachValueNode} fg={fg()} content={content()} />
+        <box ref={attachRowNode} width="100%" flexDirection={props.stacked ? "column" : "row"} justifyContent="space-between" visible={visible()}>
+            <text ref={attachLabelNode} fg={props.theme.textMuted} content={visible() ? label() : ""} />
+            <text ref={attachValueNode} fg={fg()} content={content()} width={props.stacked ? "100%" : undefined} wrapMode={props.stacked ? "char" : "none"} />
         </box>
     )
 }
