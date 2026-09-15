@@ -17,6 +17,22 @@ export { default } from "/absolute/path/to/opencode-metrics/src/tui.tsx"
 
 Use your own absolute path. Avoid duplicate registration through `cli.json`. Restart the client process, not just its connected service. Local installations require explicit checkout updates; they do not track npm automatically.
 
+## Never configure `dist/` as a plugin target
+
+A configured directory is resolved by filename convention, not by `package.json`
+exports. The CLI role imports `<directory>/tui.js`, so pointing `plugins` at this
+checkout's `dist/` fails with `Unexpected <`: the build preserves Solid JSX in
+`dist/tui.js`, and that file is never a loadable module. Deleting it only changes
+the failure to `Cannot find module .../dist/tui.js`, because `dist/tui.d.ts` still
+advertises the entry.
+
+Point local configuration at the checkout's `src/` directory instead. It resolves
+`src/server.ts` for the server role and `src/tui.tsx` for the CLI role, needs no
+build step, and produces one deduplicated entry in `opencode plugin list`. The
+repository root is not a working target either: it loaded no plugin on `2.0.3`.
+Published installs are unaffected, since npm consumers resolve `.` and `./tui`
+through `package.json` exports.
+
 ## Incident record — September 2026
 
 ### Raw model evidence — 0.5.0
@@ -50,6 +66,8 @@ Use your own absolute path. Avoid duplicate registration through `cli.json`. Res
 - The maintainer's global configuration was restored to local directory entries:
   `opencode.jsonc` points to this checkout's `dist/`, and `cli.json` points to
   `src/`. Both live under the config directory reported by `opencode debug paths`.
+  The `dist/` entry was later corrected to `src/` after it produced a repeating
+  `Unexpected <` CLI load failure; see the `dist/` section above.
   Other plugins, models, and credentials were preserved. No shared-service restart
   or broad cache deletion was performed.
 - The local built server entry was observed active, and a real request's RPC record
