@@ -35,6 +35,32 @@ Use your own absolute path. Avoid duplicate registration through `cli.json`. Res
   location and body `{"input":{"sessionID":"<session-id>"}}`. The raw HTTP RPC
   response wraps the record in `output`; the typed client unwraps it.
 
+#### Release and local recovery snapshot — 2026-09-15
+
+- Verified release source: commit `ef503fb`, tag `v0.5.0`.
+  GitHub Release: <https://github.com/nxxxsooo/opencode-metrics/releases/tag/v0.5.0>.
+- Release workflow run `34964893483` succeeded and logged
+  `+ opencode-metrics@0.5.0` after the npm publish step. The final local checks
+  passed 160 tests, typecheck, build, and package audit.
+- **Registry visibility was still blocked at the last observation:** public
+  package metadata reported `latest: 0.4.2`, the `0.5.0` version endpoint returned
+  404, and `opencode plugin add opencode-metrics@0.5.0` failed with
+  `NpmInstallFailedError` / no matching version. Cause was not established; do not
+  equate the successful publish job with verified consumer availability.
+- The maintainer's global configuration was restored to local directory entries:
+  `opencode.jsonc` points to this checkout's `dist/`, and `cli.json` points to
+  `src/`. Both live under the config directory reported by `opencode debug paths`.
+  Other plugins, models, and credentials were preserved. No shared-service restart
+  or broad cache deletion was performed.
+- The local built server entry was observed active, and a real request's RPC record
+  contained the requested alias plus a distinct complete response identifier.
+  Retention through idle/pending periods, large envelopes, and storage recovery
+  were tested. A fresh maintainer TUI displaying the final retention fix and a
+  clean install from the public `0.5.0` package remain unverified boundaries.
+- Recovery anchors are this snapshot, the `v0.5.0` source, and the install/model
+  evidence sections in `README.md` / `README_CN.md`; temporary smoke-test output
+  files are not the authoritative recovery record.
+
 **Observed:** an isolated O2 launcher selected a non-default config directory. Earlier edits targeted the default directory. The existing `tui-v2` candidate checks covered an older API, not the current O2 beta contract. Subsequent `cli.json` attempts did not establish a successful load.
 
 **Verified mitigation:** the actual global discovery directory contained a `tui.ts` entry importing this checkout. A startup toast demonstrated setup execution; the user subsequently confirmed Metrics appeared. The diagnostic toast was removed. The host version inspected was `0.0.0-beta-19086`.
