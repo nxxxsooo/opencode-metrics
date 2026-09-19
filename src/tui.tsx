@@ -9,6 +9,7 @@ import { SidebarMetrics } from "./components/SidebarMetrics"
 import { createMetricsSidebarController, resolveMetricsPrefs } from "./tui-preferences"
 import { readTuiPreferencesFileSync } from "./tui-prefs-io"
 import type { MetricsTheme } from "./types"
+import { resolveMetricsTheme } from "./theme-tokens"
 import { ModelIdentityRpc } from "./model-identity-rpc"
 import { modelIdentifier, type ModelIdentity } from "./model-identity"
 
@@ -48,13 +49,7 @@ export default Plugin.define({
     }
     const prefs = resolveMetricsPrefs(readTuiPreferencesFileSync())
     const controller = createMetricsSidebarController(prefs, () => host.requestRender())
-    const theme: MetricsTheme = {
-      text: context.theme.text.default,
-      textMuted: context.theme.text.subdued,
-      accent: context.theme.text.status.running,
-      warning: context.theme.text.feedback.warning.default,
-      success: context.theme.text.feedback.success.default,
-    }
+    const theme: MetricsTheme = resolveMetricsTheme(context.theme)
     const unregister = context.ui.slot({
       prepend: "sidebar.content",
       render: ({ sessionID }) => (
