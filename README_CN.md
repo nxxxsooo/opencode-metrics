@@ -70,6 +70,8 @@ OpenCode V2 `2.0.3` 上已通过真实 Responses 请求验证请求与响应模�
 这个差异。如果仍返回原别名或不返回该字段，插件无法推断隐藏的后端。
 请求与响应分开记录的口径参照 [OpenTelemetry GenAI](https://github.com/open-telemetry/semantic-conventions-genai)
 和 [OpenLLMetry OpenAI instrumentation](https://github.com/traceloop/openllmetry-js/tree/main/packages/instrumentation-openai)。
+这里是设计参考：插件使用自己的 OpenCode HTTP 钩子和流式扫描器，未引入 OpenLLMetry
+依赖，也未复制其实现。
 本功能被动读取响应证据，不额外发送模型探测请求。
 
 <br/>

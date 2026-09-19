@@ -81,6 +81,33 @@ repository root is not a working target either: it loaded no plugin on `2.0.3`.
 Published installs are unaffected, since npm consumers resolve `.` and `./tui`
 through `package.json` exports.
 
+## Release and maintainer snapshot — 2026-09-19
+
+- Released source: tag `v0.6.0`, commit `aac179c`.
+  [GitHub Release](https://github.com/nxxxsooo/opencode-metrics/releases/tag/v0.6.0).
+- [Release CI](https://github.com/nxxxsooo/opencode-metrics/actions/runs/35429530773)
+  and [Compatibility CI](https://github.com/nxxxsooo/opencode-metrics/actions/runs/35429529018)
+  succeeded for that commit. The release checks passed 168 tests, typecheck,
+  build, and package audit.
+- Public npm `latest` resolved to `0.6.0`. The canonical tarball downloaded and
+  matched the registry integrity hash; runtime source files matched the release
+  checkout. Initial registry/version/tarball 404s cleared before completion;
+  successful CI alone was not treated as consumer availability.
+- The maintainer's configuration now uses the published package
+  `opencode-metrics@0.6.0` in `opencode.jsonc`, replacing the local `src/` fallback.
+  The duplicate metrics registration was removed from `cli.json`. Other settings
+  were preserved, and no shared-service restart was needed.
+- The published package was verified on OpenCode `2.0.9`: the default-off
+  installation rendered token metrics without model rows; an isolated opt-in
+  location restored retained model evidence through the existing RPC. Monitoring
+  remains off in the maintainer's normal configuration.
+- OpenLLMetry is a design reference, not an installed library or copied code.
+  Collection still uses this project's HTTP hooks and streaming scanner. Active
+  fingerprinting was researched but was not integrated or run.
+
+Recovery anchors are `v0.6.0`, this snapshot, and the model-monitoring sections in
+`README.md` / `README_CN.md`; temporary verification files are not required.
+
 ## Incident record — September 2026
 
 ### Raw model evidence — 0.5.0
@@ -111,8 +138,8 @@ through `package.json` exports.
   404, and `opencode plugin add opencode-metrics@0.5.0` failed with
   `NpmInstallFailedError` / no matching version. Cause was not established; do not
   equate the successful publish job with verified consumer availability.
-  Follow-up on 2026-09-19: the public registry now reports `latest: 0.5.0`, and
-  the `0.5.0` version endpoint returns its version and tarball URL. The earlier
+  Before the 0.6.0 release on 2026-09-19, the public registry reported `latest: 0.5.0`, and
+  the `0.5.0` version endpoint returned its version and tarball URL. The earlier
   visibility failure is historical; its cause remains undetermined.
 - The maintainer's global configuration was restored to local directory entries:
   `opencode.jsonc` points to this checkout's `dist/`, and `cli.json` points to

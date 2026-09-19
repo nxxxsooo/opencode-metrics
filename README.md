@@ -109,8 +109,10 @@ For example, if a provider routes a retired alias to a replacement and returns
 the replacement in `model`, the two rows show that difference. If it echoes the
 alias or omits the field, the plugin cannot infer the hidden backend.
 
-The request/response distinction follows [OpenTelemetry GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai)
+The request/response distinction is consistent with [OpenTelemetry GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai)
 and the [OpenLLMetry OpenAI instrumentation](https://github.com/traceloop/openllmetry-js/tree/main/packages/instrumentation-openai).
+These are design references: this plugin uses its own OpenCode HTTP hooks and
+streaming scanner, with no OpenLLMetry dependency or copied implementation.
 This is passive response evidence, with no extra model-probing requests.
 
 ## Why a sidebar, not a footer bar
