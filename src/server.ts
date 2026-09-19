@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode-ai/plugin"
 import { createModelParser, modelIdentifier, readRequestModel, type ModelIdentity } from "./model-identity"
 import { ModelIdentityRpc } from "./model-identity-rpc"
+import type { ModelEvidence } from "./model-evidence"
 
 export default Plugin.define({
   // Internal server/storage identity within the opencode-metrics package.
@@ -10,14 +11,15 @@ export default Plugin.define({
     // Opt-in collection, not just a row-visibility preference. When disabled,
     // leave HTTP bodies and saved evidence untouched and expose no model RPC.
     if (context.options?.modelMonitor !== true) return
-    const records = new Map<string, ModelIdentity>()
-    const requests = new WeakMap<Request, ModelIdentity>()
+    const { createModelEvidence } = await import("./model-evidence")
+    const records = new Map<string, ModelEvidence>()
+    const requests = new WeakMap<Request, ModelEvidence>()
     const lastReported = new Map<string, ModelIdentity>()
     let disposed = false
     const rpc = await context.rpc.register(ModelIdentityRpc, {
       get: async (input) => {
         const sessionID = (input as { sessionID: string }).sessionID
-        const current = records.get(sessionID)
+        const current = records.get(sessionID)?.identity
         if (current?.reported) return { ...current, previous: false }
         let last = lastReported.get(sessionID)
         if (!last) {
@@ -36,31 +38,30 @@ export default Plugin.define({
     })
     const requestHook = await context.session.hook("http.request", async (event) => {
       if (event.kind !== "primary" || disposed) return
-      const record: ModelIdentity = { requested: null, reported: null, source: null, observedAt: Date.now() }
+      const evidence = createModelEvidence()
       records.delete(event.sessionID)
-      records.set(event.sessionID, record)
-      requests.set(event.request, record)
+      records.set(event.sessionID, evidence)
+      requests.set(event.request, evidence)
       if (records.size > 256) records.delete(records.keys().next().value!)
-      record.requested = await readRequestModel(event.request)
+      evidence.request(await readRequestModel(event.request))
     })
     const responseHook = await context.session.hook("http.response", async (event) => {
       if (event.kind !== "primary" || disposed) return
       // Read the final request too: a later plugin may have replaced or rewritten it.
       const tracked = requests.get(event.request)
       if (tracked && records.get(event.sessionID) !== tracked) return
-      const record = tracked
-        ?? { requested: null, reported: null, source: null, observedAt: Date.now() }
-      record.requested = await readRequestModel(event.request)
+      const evidence = tracked ?? createModelEvidence()
+      evidence.request(await readRequestModel(event.request))
       if (disposed) return
-      records.set(event.sessionID, record)
+      records.set(event.sessionID, evidence)
       if (records.size > 256) records.delete(records.keys().next().value!)
       const response = event.response
       const contentType = response.headers.get("content-type") ?? ""
       if (!response.ok || !response.body || !/text\/event-stream|application\/json/i.test(contentType)) return
       const parser = createModelParser(/text\/event-stream/i.test(contentType), (model, source) => {
-        if (disposed || records.get(event.sessionID) !== record) return
-        record.reported = model
-        record.source = source
+        if (disposed || records.get(event.sessionID) !== evidence) return
+        evidence.response(model, source)
+        const record = evidence.identity
         const prior = lastReported.get(event.sessionID)
         if (prior?.observedAt === record.observedAt && prior.reported === model && prior.source === source) return
         const snapshot = { ...record }

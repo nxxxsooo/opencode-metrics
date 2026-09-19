@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
+import { LLMSpan } from "@traceloop/node-server-sdk"
 import { createModelParser, modelIdentifier, readRequestModel, reportedModel } from "../src/model-identity"
 import server from "../src/server"
 
@@ -96,6 +97,49 @@ function event(sessionID: string, model: string, body: string, kind = "primary")
 }
 
 describe("server HTTP hooks", () => {
+  test.each([
+    ["application/json", '{"model":"replacement"}', "model"],
+    ["text/event-stream", 'data: {"model":"replacement","choices":[]}\n\n', "model"],
+    ["text/event-stream", 'data: {"response":{"model":"replacement","instructions":"PRIVATE"}}\n\n', "response.model"],
+    ["text/event-stream", 'data: {"message":{"model":"replacement","content":[]}}\n\n', "message.model"],
+  ])("OpenLLMetry records %s evidence from %s", async (contentType, body, source) => {
+    const requestSpy = spyOn(LLMSpan.prototype, "reportRequest")
+    const responseSpy = spyOn(LLMSpan.prototype, "reportResponse")
+    const saved = new Map<string, unknown>()
+    const h = await harness(saved)
+    try {
+      const e = event("upstream", "retired", body)
+      // Supply fragmented bytes through the real HTTP-hook -> SDK -> RPC path.
+      const bytes = encoder.encode(body)
+      e.response = new Response(new ReadableStream({
+        start(controller) {
+          for (const byte of bytes) controller.enqueue(new Uint8Array([byte]))
+          controller.close()
+        },
+      }), { headers: { "content-type": contentType, "x-test": "preserved" } })
+      await h.hooks.get("http.request")!(e)
+      // Verify the final rewritten request is also reported through the SDK.
+      e.request = new Request(e.request.url, { method: "POST", body: '{"model":"final-alias","input":"PRIVATE"}' })
+      await h.hooks.get("http.response")!(e)
+      expect(await e.response.text()).toBe(body)
+      expect(e.response.headers.get("x-test")).toBe("preserved")
+      expect(requestSpy.mock.calls.map(([input]) => input)).toEqual([
+        { model: "retired", messages: [] }, { model: "final-alias", messages: [] },
+      ])
+      expect(responseSpy.mock.calls.map(([input]) => input)).toEqual([{ model: "replacement" }])
+      expect(await h.get("upstream")).toMatchObject({ requested: "final-alias", reported: "replacement", source })
+      expect(saved.get("model/upstream")).toMatchObject({ requested: "final-alias", reported: "replacement", source })
+      expect(Object.keys(saved.get("model/upstream") as object).sort()).toEqual([
+        "observedAt", "reported", "requested", "source",
+      ])
+      expect(JSON.stringify([...saved])).not.toContain("PRIVATE")
+    } finally {
+      requestSpy.mockRestore()
+      responseSpy.mockRestore()
+      await h.cleanup?.()
+    }
+  })
+
   test("model monitoring is opt-in and disabled values touch no HTTP, RPC or storage", async () => {
     for (const options of [undefined, {}, { modelMonitor: false }, { modelMonitor: "true" }, { modelMonitor: 1 }]) {
       // No other host capabilities are provided: any access fails the test.

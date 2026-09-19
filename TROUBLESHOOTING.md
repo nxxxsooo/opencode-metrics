@@ -81,7 +81,38 @@ repository root is not a working target either: it loaded no plugin on `2.0.3`.
 Published installs are unaffected, since npm consumers resolve `.` and `./tui`
 through `package.json` exports.
 
-## Release and maintainer snapshot — 2026-09-19
+## OpenLLMetry integration — 0.7.0
+
+Version `0.7.0` depends on `@traceloop/node-server-sdk@0.27.0` and calls its
+public `LLMSpan.reportRequest()` / `reportResponse()` API in the model evidence
+path. This is an actual library integration; the released `0.6.0` package below
+still represents the earlier design-reference-only implementation.
+
+`src/model-evidence.ts` adapts an inert OpenTelemetry span to a local allowlisted
+attribute sink. OpenLLMetry writes the request and response model attributes;
+the sink updates the existing `ModelIdentity` fields. The HTTP scanner remains
+responsible for bounded JSON/SSE extraction and passes no prompt or response
+content to the SDK. Existing RPC and stored-record shapes are unchanged.
+
+OpenCode exposes native HTTP streams rather than SDK client instances, so the
+integration uses OpenLLMetry's manual API instead of SDK monkey-patching. Do not
+call `initialize()` or register global tracer providers/exporters in this plugin:
+the server process is shared with OpenCode and other plugins. The SDK and its
+transitive dependencies are installed with the package, but the runtime import
+occurs only after the `modelMonitor === true` check. No Traceloop key is needed.
+
+When packaging, include every lazy `dist/chunk-*.js` import. The build config pins
+the chunk naming convention to the package allowlist. Verify both default-off
+setup and enabled collection using the packed server entry, not just `src/`.
+Tests spy on the real SDK methods for JSON, Chat Completions, Responses and
+Anthropic-style events, and use isolated processes to check lazy loading, no
+network export, and preservation of the host's tracer provider.
+
+The pre-release check passed 175 tests, typecheck, build, and package audit.
+An isolated consumer installed the packed package and verified default-off setup,
+an actual `LLMSpan.reportResponse()` call, byte-preserving SSE, RPC and storage.
+
+## Historical 0.6.0 release and maintainer snapshot — 2026-09-19
 
 - Released source: tag `v0.6.0`, commit `aac179c`.
   [GitHub Release](https://github.com/nxxxsooo/opencode-metrics/releases/tag/v0.6.0).
@@ -101,7 +132,7 @@ through `package.json` exports.
   installation rendered token metrics without model rows; an isolated opt-in
   location restored retained model evidence through the existing RPC. Monitoring
   remains off in the maintainer's normal configuration.
-- OpenLLMetry is a design reference, not an installed library or copied code.
+- In `0.6.0`, OpenLLMetry was a design reference, not an installed library or copied code.
   Collection still uses this project's HTTP hooks and streaming scanner. Active
   fingerprinting was researched but was not integrated or run.
 

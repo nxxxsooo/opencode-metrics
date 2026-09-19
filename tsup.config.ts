@@ -10,5 +10,7 @@ export default defineConfig({
   target: "esnext",
   esbuildOptions(options) {
     options.jsx = "preserve"
+    // Keep lazy server dependencies inside the published dist/chunk-*.js set.
+    options.chunkNames = "chunk-[hash]"
   },
 })

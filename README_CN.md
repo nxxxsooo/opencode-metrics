@@ -41,7 +41,7 @@ checkout 的 `src/` 绝对路径；远程连接时，在运行采集入口的服
 首次安装或显式升级：
 
 ```sh
-opencode plugin add opencode-metrics@0.6.0
+opencode plugin add opencode-metrics@0.7.0
 ```
 
 已有未锁定版本的条目可用 `opencode plugin update opencode-metrics` 更新。
@@ -50,7 +50,7 @@ TUI 入口；如果之前按两份配置安装，移除 `cli.json` 中重复的 
 已安装副本不会自动跟随 npm 更新，升级后新开 TUI 验证。
 本地开发时安装 checkout 依赖，在 `opencode.jsonc` 中配置一次本仓库 `src/` 目录的
 绝对路径，即可发现服务端和 TUI 入口。源码加载无需构建，构建不会修改现有配置。
-回退时将 CLI 条目锁定为 `opencode-metrics@0.4.2`，并移除新增的服务端入口。
+回退本次接入时，在同一个 `opencode.jsonc` 条目中锁定 `opencode-metrics@0.6.0` 即可。
 
 开启监控并展开侧栏后可见「Request model」「Response model」「Model evidence」：分别来自实际发出的
 JSON 请求体、本机收到的原始 JSON／SSE 模型字段，以及字段来源。完整内部标识自动换行，
@@ -68,11 +68,20 @@ OpenCode V2 `2.0.3` 上已通过真实 Responses 请求验证请求与响应模�
 
 例如，运营商把退役别名路由到替代模型，并在 `model` 中返回替代模型名，两行就能显示
 这个差异。如果仍返回原别名或不返回该字段，插件无法推断隐藏的后端。
-请求与响应分开记录的口径参照 [OpenTelemetry GenAI](https://github.com/open-telemetry/semantic-conventions-genai)
-和 [OpenLLMetry OpenAI instrumentation](https://github.com/traceloop/openllmetry-js/tree/main/packages/instrumentation-openai)。
-这里是设计参考：插件使用自己的 OpenCode HTTP 钩子和流式扫描器，未引入 OpenLLMetry
-依赖，也未复制其实现。
-本功能被动读取响应证据，不额外发送模型探测请求。
+
+### OpenLLMetry 接入（0.7.0）
+
+从 `0.7.0` 起，插件直接使用官方
+[`@traceloop/node-server-sdk@0.27.0`](https://github.com/traceloop/openllmetry-js/tree/main/packages/traceloop-sdk)
+库（Apache-2.0）。实际调用 `LLMSpan.reportRequest()` 和 `reportResponse()`，将
+`gen_ai.request.model`、`gen_ai.response.model` 写入本地属性接收器，供现有侧栏和
+历史证据存储使用。已发布的 `0.6.0` 尚未包含这次接入，当时仅参考了上游设计。
+
+OpenCode HTTP 钩子和有界流式扫描器负责提取标识，`src/model-evidence.ts` 将标识交给
+OpenLLMetry。只有 `modelMonitor: true` 时才在服务端加载 SDK；请求消息传空数组，
+不传响应正文，接收器只接受两个模型属性。不调用 SDK 的 `initialize()`，不启用全局
+自动埋点或遥测导出，无需 Traceloop 账号，也不额外发送探测请求。接入后仍只记录
+运营商声明的模型，不能独立验证真实后端身份。
 
 <br/>
 

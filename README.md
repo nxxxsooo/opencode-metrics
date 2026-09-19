@@ -75,7 +75,7 @@ First install or upgrade explicitly (existing installs do not follow registry
 updates automatically):
 
 ```sh
-opencode plugin add opencode-metrics@0.6.0
+opencode plugin add opencode-metrics@0.7.0
 ```
 
 If already configured with an unpinned package name, use
@@ -83,8 +83,8 @@ If already configured with an unpinned package name, use
 `opencode.jsonc`, preserving other plugins. Reopen the TUI to verify the update.
 For local development, install checkout dependencies and configure the absolute
 path to the repository's `src/` directory once in `opencode.jsonc`.
-No live configuration is changed by building this repository. To roll back, pin
-`opencode-metrics@0.4.2` in CLI config and remove the new server entry.
+No live configuration is changed by building this repository. To roll back this
+integration, pin `opencode-metrics@0.6.0` in the same `opencode.jsonc` entry.
 
 With monitoring enabled, expanded Metrics shows **Request model**, **Response model**, and **Model
 evidence** for the foreground session's latest primary HTTP request (even in tree
@@ -109,11 +109,23 @@ For example, if a provider routes a retired alias to a replacement and returns
 the replacement in `model`, the two rows show that difference. If it echoes the
 alias or omits the field, the plugin cannot infer the hidden backend.
 
-The request/response distinction is consistent with [OpenTelemetry GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai)
-and the [OpenLLMetry OpenAI instrumentation](https://github.com/traceloop/openllmetry-js/tree/main/packages/instrumentation-openai).
-These are design references: this plugin uses its own OpenCode HTTP hooks and
-streaming scanner, with no OpenLLMetry dependency or copied implementation.
-This is passive response evidence, with no extra model-probing requests.
+### OpenLLMetry integration (0.7.0)
+
+Starting with `0.7.0`, the plugin directly uses the official
+[`@traceloop/node-server-sdk@0.27.0`](https://github.com/traceloop/openllmetry-js/tree/main/packages/traceloop-sdk)
+library (Apache-2.0). Its `LLMSpan.reportRequest()` and `reportResponse()` methods
+write `gen_ai.request.model` and `gen_ai.response.model` into a local attribute
+sink; those values populate the existing sidebar evidence and saved records.
+The published `0.6.0` release predates this integration and only referenced the
+upstream design.
+
+OpenCode's HTTP hooks and bounded streaming scanner extract the identifiers;
+`src/model-evidence.ts` passes only those identifiers to OpenLLMetry. The SDK is
+loaded lazily on the server when `modelMonitor: true`. Request messages are an
+empty array, response content is omitted, and the sink accepts only the two model
+attributes. There is no SDK `initialize()` call, global auto-instrumentation,
+telemetry exporter, Traceloop account requirement, or additional probing request.
+Enabling this integration does not independently verify the provider's identity.
 
 ## Why a sidebar, not a footer bar
 
