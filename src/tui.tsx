@@ -17,11 +17,12 @@ export default Plugin.define({
   id: "opencode-metrics",
   setup(context) {
     const config = getConfig()
+    const modelMonitor = context.options?.modelMonitor === true
     const host = createOpenCodeV2Host(context, log)
     const collector = createCollector(host, config, log)
-    const modelRpc = context.client.rpc(ModelIdentityRpc)
+    const modelRpc = modelMonitor ? context.client.rpc(ModelIdentityRpc) : undefined
     const modelCutoffs = new Map<string, number>()
-    const stopModelEvents = context.data.listen(({ details }) => {
+    const stopModelEvents = modelMonitor ? context.data.listen(({ details }) => {
       const event = details as unknown as { type: string; created?: number; data?: { sessionID?: string } }
       const sessionID = event.data?.sessionID
       if (!sessionID) return
@@ -32,8 +33,9 @@ export default Plugin.define({
         if (modelCutoffs.size > 256) modelCutoffs.delete(modelCutoffs.keys().next().value!)
       }
       if (event.type === "session.deleted") modelCutoffs.delete(sessionID)
-    })
+    }) : () => {}
     const fetchModelIdentity = async (sessionID: string): Promise<ModelIdentity | null> => {
+      if (!modelRpc) return null
       const value = await modelRpc.get({ sessionID }, {
         location: context.data.session.get(sessionID)?.location ?? context.location ?? context.data.location.default(),
         signal: AbortSignal.timeout(5000),
@@ -60,9 +62,10 @@ export default Plugin.define({
           barConfig={config}
           theme={theme}
           controller={controller}
-            requestRender={() => host.requestRender()}
-            fetchModelIdentity={fetchModelIdentity}
-            modelEpoch={() => modelCutoffs.get(sessionID) ?? 0}
+          requestRender={() => host.requestRender()}
+          modelMonitor={modelMonitor}
+          fetchModelIdentity={modelMonitor ? fetchModelIdentity : undefined}
+          modelEpoch={() => modelCutoffs.get(sessionID) ?? 0}
         />
       ),
     })

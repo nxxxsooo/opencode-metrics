@@ -1,6 +1,6 @@
 {
   "name": "opencode-metrics",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "OpenCode O2 CLI sidebar plugin for real-time LLM token metrics",
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
     "src/model-json-scanner.ts",
     "dist/tui.d.ts",
     "src/tui.tsx",
+    "src/theme-tokens.ts",
     "src/tui-preferences.ts",
     "src/tui-prefs-io.ts",
     "src/badge-contrast.ts",

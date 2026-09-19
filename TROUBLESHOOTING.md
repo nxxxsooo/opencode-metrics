@@ -4,18 +4,66 @@
 
 Run `opencode2 --version` and `opencode2 debug paths` through the same launcher used for the TUI. Inspect that launcher's configuration overrides. Do not assume the default config directory or confuse the V1 `opencode` executable with O2.
 
-1. **Configuration:** inspect `<config>/cli.json` and `<config>/plugins/`. O2 uses `plugins`, not the legacy `tui.json(c)` `plugin` field. Preserve sibling settings.
+1. **Configuration:** inspect `<config>/opencode.jsonc`, `<config>/cli.json`, and `<config>/plugins/`. Register this package once in `opencode.jsonc`; O2 discovers its TUI entry automatically. O2 uses `plugins`, not the legacy `tui.json(c)` `plugin` field. Preserve sibling settings.
 2. **Loading:** verify the entry executes in the new client process. A temporary startup toast can prove setup ran; remove it after inspection. Server restart, npm availability, and cached package presence are not loading proof.
 3. **Rendering:** enter a session, expose its sidebar, and inspect actual pixels or accessibility structure. A terminal capture containing source code, tool commands, or old conversation text is not proof. Use a clean session and assert the sidebar location.
 4. **Metrics:** separately check observable deltas, finalized usage, completion timing, two unrelated sessions, and a real parent-child tree. A visible header alone proves none of these.
 
-For local source, install checkout dependencies and create `<config>/plugins/opencode-metrics/tui.ts`:
+For local source, install checkout dependencies and add one entry to `<config>/opencode.jsonc`:
 
-```ts
-export { default } from "/absolute/path/to/opencode-metrics/src/tui.tsx"
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["/absolute/path/to/opencode-metrics/src"]
+}
 ```
 
-Use your own absolute path. Avoid duplicate registration through `cli.json`. Restart the client process, not just its connected service. Local installations require explicit checkout updates; they do not track npm automatically.
+Use your own absolute path and preserve existing settings. Remove an older duplicate metrics entry from `cli.json` or a metrics-only discovery shim. Open a fresh client to verify loading. Local installations require explicit checkout updates; they do not track npm automatically.
+
+## One installation, two runtime roles
+
+On OpenCode `2.0.9`, `/plugins` groups entries by **TUI** and **Server**.
+The Metrics sidebar (`opencode-metrics`) and HTTP collector
+(`opencode-metrics-model`) belong to this one package and one configuration entry.
+The model rows already render inside the Metrics sidebar.
+
+A fresh-client check on 2026-09-19 confirmed that removing the duplicate
+`cli.json` registration still loads both roles. A temporary same-ID probe also
+showed two rows, one in each group; the probe was reverted. Collapsing these rows
+requires a host UI change, not a plugin ID rename. Keep the server ID stable:
+OpenCode namespaces `context.storage` by plugin ID, so renaming it would hide
+existing model evidence. Keep the RPC contract `opencode-metrics-model/get` too.
+
+With the final single-entry config, a fresh client rendered the Metrics sidebar
+with its request/response model rows, and the existing RPC returned model
+evidence. `bun run check` passed 164 tests, typecheck, build, and package dry-run;
+the package now includes `src/theme-tokens.ts`, required by the earlier theme fix.
+This verifies local source loading; it is not a new npm release verification.
+
+`opencode plugin list` reports server plugins; verify the sidebar separately in
+a fresh TUI. A server entry with `features.tui: true` advertises a TUI entry but
+does not prove client setup or rendering succeeded.
+
+## Model monitoring is opt-in from 0.6.0
+
+Use a single configured entry with `options: { "modelMonitor": true }` to enable
+both capture and the model rows. The plain package/path string defaults to off.
+When off, the server entry remains active but registers no model HTTP hooks or
+RPC; the TUI keeps token metrics and does not poll or render model rows.
+An unavailable `opencode-metrics-model/get` RPC is therefore expected when off.
+`rows.model` and `visible.model` are presentation filters, not capture switches.
+
+Disabling collection retains saved evidence in its existing namespace. Re-enable
+to restore it. A returned replacement model is captured only if the provider or
+relay declares it in a supported HTTP response field; an echoed alias is not
+proof of the backend model. Native WebSocket model evidence remains unsupported.
+
+The 0.6.0 pre-release check passed 168 tests, typecheck, build, and package audit.
+A fresh 2.0.9 client with default options rendered token metrics without model
+rows. In an isolated location with `modelMonitor: true`, the existing model RPC
+returned retained evidence; the default-off location returned `rpc.unavailable`.
+HTTP-hook tests cover a retired request alias with a provider-declared replacement
+and a missing response model that remains unknown.
 
 ## Never configure `dist/` as a plugin target
 
@@ -63,6 +111,9 @@ through `package.json` exports.
   404, and `opencode plugin add opencode-metrics@0.5.0` failed with
   `NpmInstallFailedError` / no matching version. Cause was not established; do not
   equate the successful publish job with verified consumer availability.
+  Follow-up on 2026-09-19: the public registry now reports `latest: 0.5.0`, and
+  the `0.5.0` version endpoint returns its version and tarball URL. The earlier
+  visibility failure is historical; its cause remains undetermined.
 - The maintainer's global configuration was restored to local directory entries:
   `opencode.jsonc` points to this checkout's `dist/`, and `cli.json` points to
   `src/`. Both live under the config directory reported by `opencode debug paths`.

@@ -37,6 +37,44 @@ function createTheme(): MetricsTheme {
 }
 
 describe("SidebarMetrics", () => {
+    test.each([undefined, false])("model monitoring %s hides model rows and performs no polling", async (modelMonitor) => {
+        let listener: MetricsListener | null = null
+        let polls = 0
+        const activeCollector: MetricsCollector = {
+            ...collector,
+            getAggregate: () => ({
+                sessionIDs: ["ses_test"], childSessionCount: 0,
+                inputTokens: 1, outputTokens: 1, cacheReadTokens: 0,
+                cacheReadCompleteness: "unknown", requestStartTime: performance.now(),
+                firstTokenTime: null, completeTime: null, ttft: null,
+                liveTps: 12, averageTps: null, previousAverageTps: null,
+                inputIsEstimated: false, outputIsEstimated: false,
+                isStreaming: true, isComplete: false,
+            }),
+            subscribe: (next) => { listener = next; return () => { listener = null } },
+        }
+        const controller: MetricsSidebarController = {
+            prefs: () => DEFAULT_PREFS, collapsed: () => false,
+            toggleCollapsed: () => {}, subscribe: () => () => {},
+        }
+        const setup = await testRender(() => (
+            <SidebarMetrics sessionID="ses_test" collector={activeCollector}
+                refreshIntervalMs={10_000} barConfig={DEFAULT_CONFIG}
+                theme={createTheme()} controller={controller} modelMonitor={modelMonitor}
+                fetchModelIdentity={async () => { polls++; return null }} />
+        ), { width: 40, height: 24 })
+        try {
+            await setup.flush()
+            listener?.()
+            const frame = await setup.waitForFrame((value) => value.includes("12.0 t/s live"))
+            expect(polls).toBe(0)
+            expect(frame).toContain("Tokens")
+            expect(frame).not.toContain("Request model")
+            expect(frame).not.toContain("Response model")
+            expect(frame).not.toContain("Model evidence")
+        } finally { setup.renderer.destroy() }
+    })
+
     test("raw model rows wrap full identifiers, reset on a new step and show unavailable collection", async () => {
         let listener: MetricsListener | null = null
         let epoch = 0
@@ -63,6 +101,7 @@ describe("SidebarMetrics", () => {
         const setup = await testRender(() => (
             <SidebarMetrics sessionID="ses_test" collector={activeCollector}
                 refreshIntervalMs={10_000} barConfig={DEFAULT_CONFIG}
+                modelMonitor={true}
                 theme={createTheme()} controller={controller} modelEpoch={() => epoch}
                 fetchModelIdentity={async () => {
                     if (unavailable) throw new Error("missing RPC")

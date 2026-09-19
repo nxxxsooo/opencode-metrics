@@ -22,6 +22,7 @@ interface SidebarMetricsProps {
     theme: MetricsTheme
     controller: MetricsSidebarController
     requestRender?: () => void
+    modelMonitor?: boolean
     fetchModelIdentity?: (sessionID: string) => Promise<ModelIdentity | null>
     modelEpoch?: () => number
 }
@@ -121,6 +122,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
     }
 
     const rowVisible = (key: keyof BarConfig["visible"]): boolean => {
+        if (key === "model" && props.modelMonitor !== true) return false
         const barVis = props.barConfig.visible
         const rowPrefs = props.controller.prefs().rows
         return barVis[key] !== false && rowPrefs[key as keyof typeof rowPrefs] !== false

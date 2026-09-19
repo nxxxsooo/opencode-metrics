@@ -73,6 +73,7 @@ async function harness(saved = new Map<string, unknown>()) {
   const hooks = new Map<string, (event: HookEvent) => Promise<void>>()
   let get: (input: unknown) => Promise<unknown> = async () => null
   const cleanup = await server.setup({
+    options: { modelMonitor: true },
     storage: { get: async (key: string) => saved.get(key), set: async (key: string, value: unknown) => { saved.set(key, value) } },
     rpc: { register: async (_definition: unknown, handlers: { get: typeof get }) => {
       get = handlers.get
@@ -95,6 +96,34 @@ function event(sessionID: string, model: string, body: string, kind = "primary")
 }
 
 describe("server HTTP hooks", () => {
+  test("model monitoring is opt-in and disabled values touch no HTTP, RPC or storage", async () => {
+    for (const options of [undefined, {}, { modelMonitor: false }, { modelMonitor: "true" }, { modelMonitor: 1 }]) {
+      // No other host capabilities are provided: any access fails the test.
+      expect(await server.setup({ options } as Parameters<typeof server.setup>[0])).toBeUndefined()
+    }
+  })
+
+  test("reports a provider's declared replacement model without guessing missing evidence", async () => {
+    const h = await harness()
+    try {
+      const routed = event("routed", "retired-model-alias", '{"model":"replacement-flash"}')
+      routed.response = new Response('{"model":"replacement-flash"}', {
+        headers: { "content-type": "application/json" },
+      })
+      await h.hooks.get("http.request")!(routed)
+      await h.hooks.get("http.response")!(routed)
+      expect(await routed.response.text()).toBe('{"model":"replacement-flash"}')
+      expect(await h.get("routed")).toMatchObject({
+        requested: "retired-model-alias", reported: "replacement-flash", source: "model",
+      })
+      const hidden = event("hidden", "retired-model-alias", 'data: {"choices":[]}\n\n')
+      await h.hooks.get("http.request")!(hidden)
+      await h.hooks.get("http.response")!(hidden)
+      await hidden.response.text()
+      expect(await h.get("hidden")).toMatchObject({ requested: "retired-model-alias", reported: null })
+    } finally { await h.cleanup?.() }
+  })
+
   test("retains the last reported pair while waiting and restores it after reload", async () => {
     const saved = new Map<string, unknown>()
     const h = await harness(saved)
@@ -106,6 +135,10 @@ describe("server HTTP hooks", () => {
     await h.hooks.get("http.request")!(next)
     expect(await h.get("a")).toMatchObject({ requested: "alias", reported: internal, previous: true })
     await h.cleanup?.()
+    // Turning collection off does not read or erase previously retained evidence.
+    const beforeDisable = JSON.stringify([...saved])
+    await server.setup({ options: { modelMonitor: false } } as Parameters<typeof server.setup>[0])
+    expect(JSON.stringify([...saved])).toBe(beforeDisable)
     const reloaded = await harness(saved)
     expect(await reloaded.get("a")).toMatchObject({ requested: "alias", reported: internal })
     expect(JSON.stringify([...saved.values()])).not.toContain("SECRET")

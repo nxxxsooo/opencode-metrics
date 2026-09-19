@@ -3,8 +3,13 @@ import { createModelParser, modelIdentifier, readRequestModel, type ModelIdentit
 import { ModelIdentityRpc } from "./model-identity-rpc"
 
 export default Plugin.define({
+  // Internal server/storage identity within the opencode-metrics package.
+  // Keep stable: OpenCode scopes saved model evidence by this ID.
   id: "opencode-metrics-model",
   async setup(context) {
+    // Opt-in collection, not just a row-visibility preference. When disabled,
+    // leave HTTP bodies and saved evidence untouched and expose no model RPC.
+    if (context.options?.modelMonitor !== true) return
     const records = new Map<string, ModelIdentity>()
     const requests = new WeakMap<Request, ModelIdentity>()
     const lastReported = new Map<string, ModelIdentity>()

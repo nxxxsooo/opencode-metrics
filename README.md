@@ -22,45 +22,71 @@ English · [简体中文](./README_CN.md)
 
 ## Install from npm
 
-First run `opencode2 debug paths` using the same launcher as your TUI. Use its **config** directory, which may be overridden by `OPENCODE_CONFIG_DIR`. Add the package to `<config>/cli.json`, preserving other settings:
+First run `opencode debug paths` using the same launcher as your TUI. Use its **config** directory, which may be overridden by `OPENCODE_CONFIG_DIR`. Add the package **once** to `<config>/opencode.jsonc`, preserving other settings:
 
 ```jsonc
-// ~/.config/opencode/cli.json
+// ~/.config/opencode/opencode.jsonc
 {
+  "$schema": "https://opencode.ai/config.json",
   "plugins": ["opencode-metrics"]
 }
 ```
 
-Open a new O2 TUI window after installation; CLI plugins are loaded at startup and are not hot-reloaded. No server restart is required.
+This one registration loads both runtime entries. Token metrics work immediately; **model monitoring is off by default** (see below). OpenCode automatically loads the package's TUI entry from the connected server's plugin list; no matching entry in `cli.json` is needed. If you used the older two-config instructions, remove only the duplicate metrics entry from `cli.json`.
 
-For model evidence, also load the server entry below. CLI plugins alone cannot observe provider HTTP responses.
+Open a new TUI window to verify loading after installation or an update. A shared-server restart is not required for this configuration change.
 
-## Capture raw response models
+### Why `/plugins` has two rows
 
-Keep the CLI entry above and also load the server plugin in `opencode.jsonc`:
+`opencode-metrics` is one package with two runtime roles:
+
+- **TUI — `opencode-metrics`:** renders the sidebar, including model evidence.
+- **Server — `opencode-metrics-model`:** when opted in, observes provider HTTP and retains model evidence for the sidebar over RPC.
+
+OpenCode `2.0.9` lists TUI and Server roles separately, even when their IDs are identical. Those rows do not mean two installations. The server ID remains stable because it owns saved model records; the RPC endpoint remains `opencode-metrics-model/get`. Changing IDs does not collapse the host's rows.
+
+For an intentional **sidebar-only** installation against a server without this package, use `cli.json` instead. Token metrics still work, but raw model evidence requires the collector on the connected server. Local `src/` paths must exist on the machine loading each entry; prefer the npm package for remote setups.
+
+## Model monitoring (off by default)
+
+Starting with `0.6.0`, explicitly enable `options.modelMonitor` in the same
+`opencode.jsonc` plugin entry to collect and display model evidence:
 
 ```jsonc
 {
-  "plugins": ["opencode-metrics"]
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    { "package": "opencode-metrics", "options": { "modelMonitor": true } }
+  ]
 }
 ```
+
+Set it to `false` or omit it to turn monitoring off. Only boolean `true` enables
+it. Disabled means no model HTTP hooks, model RPC, model polling, or model rows;
+normal token metrics continue working. Existing stored evidence is retained and
+can be restored after re-enabling. This also applies when upgrading from `0.5.0`.
+The `rows.model` / `visible.model` preferences only hide enabled model rows;
+they do not opt into collection. Open a fresh TUI to verify configuration changes.
+
+For a local checkout, replace `package` with the absolute `src/` directory.
+When connecting remotely, enable the option on the server that runs the collector.
 
 First install or upgrade explicitly (existing installs do not follow registry
 updates automatically):
 
 ```sh
-opencode plugin add opencode-metrics@0.5.0
+opencode plugin add opencode-metrics@0.6.0
 ```
 
 If already configured with an unpinned package name, use
-`opencode plugin update opencode-metrics`. Keep only one metrics entry per config,
-preserving other plugins. Reopen the TUI after updating: mounted CLI plugins are
-not hot-reloaded. For local development, run `bun run build` and configure the
-absolute path to the repository's `src/` directory in server config and CLI config.
+`opencode plugin update opencode-metrics`. Keep one metrics entry in
+`opencode.jsonc`, preserving other plugins. Reopen the TUI to verify the update.
+For local development, install checkout dependencies and configure the absolute
+path to the repository's `src/` directory once in `opencode.jsonc`.
 No live configuration is changed by building this repository. To roll back, pin
 `opencode-metrics@0.4.2` in CLI config and remove the new server entry.
 
-Expanded Metrics now shows **Request model**, **Response model**, and **Model
+With monitoring enabled, expanded Metrics shows **Request model**, **Response model**, and **Model
 evidence** for the foreground session's latest primary HTTP request (even in tree
 scope). Long identifiers wrap without truncation. Request model comes from the
 outgoing JSON body, not the configured alias. Response model comes from the local
@@ -79,6 +105,14 @@ JSON parsing retains only keys and model strings, so large echoed instructions d
 not hide model evidence (maximum nesting 128, model ID 512 characters, request
 body 4 MiB). Mock HTTP-hook and sidebar tests cover collection and retention.
 
+For example, if a provider routes a retired alias to a replacement and returns
+the replacement in `model`, the two rows show that difference. If it echoes the
+alias or omits the field, the plugin cannot infer the hidden backend.
+
+The request/response distinction follows [OpenTelemetry GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai)
+and the [OpenLLMetry OpenAI instrumentation](https://github.com/traceloop/openllmetry-js/tree/main/packages/instrumentation-openai).
+This is passive response evidence, with no extra model-probing requests.
+
 ## Why a sidebar, not a footer bar
 
 A global footer-style status line keeps **one** request view. Under `opencode serve`, several attached sessions run at once — so a global bar shows aggregate or wrong-session numbers.
@@ -89,6 +123,7 @@ A global footer-style status line keeps **one** request view. Under `opencode se
 
 | OpenCode line | Status | Evidence |
 |---|---|---|
+| OpenCode V2 (`2.0.9`) | Theme compatibility and single-entry local loading confirmed | Fresh TUI renders Metrics and model rows; model RPC works; current and beta theme token names covered by tests |
 | OpenCode V2 (`2.0.3`) | Raw HTTP model capture confirmed | Real Responses request produced distinct requested/reported identifiers through plugin RPC; retention and layout covered by tests |
 | O2 beta (`0.0.0-beta-19192`) | Local loading and live speed confirmed | Global discovery entry importing local source; real TUI stream reached `9.6 t/s live` |
 | OpenCode V1 | Not supported by `0.3.x` | `0.3.x` migrates to the O2 plugin API; retain `0.2.x` for the legacy entry |
@@ -184,12 +219,14 @@ If you are an AI coding agent installing this for a user, the full procedure is:
 ```text
 GOAL: install opencode-metrics into the user's OpenCode O2 TUI.
 
-1. Run opencode2 debug paths through the user's actual launcher.
-   Add "opencode-metrics" to <config>/cli.json's "plugins" array,
-   preserving sibling entries. This npm route still needs runtime verification.
-2. Do NOT add a version suffix; "opencode-metrics" resolves latest.
-3. Tell the user to open a NEW O2 TUI window — plugins load at TUI
-   startup and are not hot-reloaded. Do not restart the OpenCode server.
+1. Run opencode debug paths through the user's actual launcher.
+   Add "opencode-metrics" once to <config>/opencode.jsonc's "plugins" array,
+   preserving sibling entries. OpenCode loads the TUI entry automatically.
+2. Remove an older duplicate metrics entry from cli.json, if present.
+   Use opencode plugin add/update to install or update the requested version.
+   Verify consumer availability; a successful publish is not installation proof.
+3. Open a NEW TUI window to verify the installed version. A shared-server
+   restart is not required. /plugins shows separate TUI and Server roles.
 
 VERIFY: a "Metrics" section appears in the TUI sidebar. Click its header
 badge to confirm it collapses/expands.
@@ -209,15 +246,18 @@ NOTES:
 
 ## Local development
 
-Install dependencies in your checkout with `bun install --frozen-lockfile`. Create `<config>/plugins/opencode-metrics/tui.ts` using the config directory from `opencode2 debug paths`:
+Install dependencies in your checkout with `bun install --frozen-lockfile`. Using the config directory from `opencode debug paths`, add the checkout's `src/` directory once in `opencode.jsonc`:
 
-```ts
-export { default } from "/absolute/path/to/opencode-metrics/src/tui.tsx"
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["/absolute/path/to/opencode-metrics/src"]
+}
 ```
 
-Replace the placeholder with your checkout path. This global discovery route was verified locally. Avoid enabling the same plugin through both discovery and `cli.json`. Start a new O2 client process and verify the actual sidebar, not text in conversation history.
+Replace the placeholder with your checkout path. OpenCode discovers `server.ts` and `tui.tsx` from this directory. No build is needed for source loading. Avoid duplicate registration through `cli.json` or an older discovery shim. Use `src/`, not `dist/` or the repository root; see [troubleshooting](./TROUBLESHOOTING.md). Start a new client and verify the actual sidebar, not text in conversation history.
 
-To update a local checkout, pull the intended revision, reinstall dependencies, and restart the client; it does not follow npm releases. To uninstall, remove only this discovery file (or the matching CLI entry for an npm install). Do not clear databases or unrelated caches.
+To update a local checkout, pull the intended revision, reinstall dependencies, and reopen the client; it does not follow npm releases. To uninstall, remove this package/path from `opencode.jsonc` and any older metrics-only CLI entry or discovery shim. Keep unrelated settings and saved data.
 
 Since `0.3.1`, the plugin prepends to `sidebar.content`; legacy `order` and `forceToTop` preferences do not affect placement. Preferences default to `~/.config/opencode/tui-preferences.jsonc`, but honor `OPENCODE_TUI_PREFERENCES_FILE`, then `OPENCODE_CONFIG_DIR`, then `XDG_CONFIG_HOME`. Runtime metric settings have a separate path policy in `src/config.ts`.
 
