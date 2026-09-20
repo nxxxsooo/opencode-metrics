@@ -21,13 +21,14 @@
 ## 模型证据监控（默认关闭）
 
 从 `0.6.0` 起，模型监控默认关闭，Token 指标照常显示。需要时在 `opencode.jsonc`
-的同一个插件条目中设置 `options.modelMonitor`：
+的同一个插件条目中设置 `modelMonitor`。OpenCode 的 `plugin` 数组只接受「包名字符串」
+或「`[包名, 选项]` 二元组」，所以选项写在第二个元素里：
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": [
-    { "package": "opencode-metrics", "options": { "modelMonitor": true } }
+  "plugin": [
+    ["opencode-metrics", { "modelMonitor": true }]
   ]
 }
 ```
@@ -93,7 +94,7 @@ OpenLLMetry。只有 `modelMonitor: true` 时才在服务端加载 SDK；请求�
 // ~/.config/opencode/opencode.jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-metrics"]
+  "plugin": ["opencode-metrics"]
 }
 ```
 
@@ -224,7 +225,7 @@ bun run init:prefs
 目标：把 opencode-metrics 装进用户的 OpenCode O2 TUI。
 
 1. 使用用户实际启动命令运行 opencode debug paths。
-   在 <config>/opencode.jsonc 的 "plugins" 数组加入一次 "opencode-metrics"，
+   在 <config>/opencode.jsonc 的 "plugin" 数组加入一次 "opencode-metrics"，
    保留其他插件条目。OpenCode 会自动加载其 TUI 入口。
 2. 如果 cli.json 中已有重复的 metrics 条目，仅移除该条目。
    用 opencode plugin add/update 安装或更新指定版本，验证消费端可用性；
@@ -254,7 +255,7 @@ bun run init:prefs
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["/absolute/path/to/opencode-metrics/src"]
+  "plugin": ["/absolute/path/to/opencode-metrics/src"]
 }
 ```
 

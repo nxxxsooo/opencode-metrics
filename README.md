@@ -28,7 +28,7 @@ First run `opencode debug paths` using the same launcher as your TUI. Use its **
 // ~/.config/opencode/opencode.jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["opencode-metrics"]
+  "plugin": ["opencode-metrics"]
 }
 ```
 
@@ -49,14 +49,16 @@ For an intentional **sidebar-only** installation against a server without this p
 
 ## Model monitoring (off by default)
 
-Starting with `0.6.0`, explicitly enable `options.modelMonitor` in the same
-`opencode.jsonc` plugin entry to collect and display model evidence:
+Starting with `0.6.0`, explicitly enable `modelMonitor` in the plugin entry's
+options object to collect and display model evidence. OpenCode's `plugin` array
+accepts either a bare package string or a `[package, options]` pair, so options
+go in the second element:
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": [
-    { "package": "opencode-metrics", "options": { "modelMonitor": true } }
+  "plugin": [
+    ["opencode-metrics", { "modelMonitor": true }]
   ]
 }
 ```
@@ -234,7 +236,7 @@ If you are an AI coding agent installing this for a user, the full procedure is:
 GOAL: install opencode-metrics into the user's OpenCode O2 TUI.
 
 1. Run opencode debug paths through the user's actual launcher.
-   Add "opencode-metrics" once to <config>/opencode.jsonc's "plugins" array,
+   Add "opencode-metrics" once to <config>/opencode.jsonc's "plugin" array,
    preserving sibling entries. OpenCode loads the TUI entry automatically.
 2. Remove an older duplicate metrics entry from cli.json, if present.
    Use opencode plugin add/update to install or update the requested version.
@@ -265,7 +267,7 @@ Install dependencies in your checkout with `bun install --frozen-lockfile`. Usin
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["/absolute/path/to/opencode-metrics/src"]
+  "plugin": ["/absolute/path/to/opencode-metrics/src"]
 }
 ```
 

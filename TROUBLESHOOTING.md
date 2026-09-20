@@ -14,7 +14,7 @@ For local source, install checkout dependencies and add one entry to `<config>/o
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["/absolute/path/to/opencode-metrics/src"]
+  "plugin": ["/absolute/path/to/opencode-metrics/src"]
 }
 ```
 
