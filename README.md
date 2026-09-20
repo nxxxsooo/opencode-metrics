@@ -49,19 +49,21 @@ For an intentional **sidebar-only** installation against a server without this p
 
 ## Model monitoring (off by default)
 
-Starting with `0.6.0`, explicitly enable `modelMonitor` in the plugin entry's
-options object to collect and display model evidence. OpenCode's `plugin` array
-accepts either a bare package string or a `[package, options]` pair, so options
-go in the second element:
+Starting with `0.7.1`, enable `modelMonitor` in `opencode-metrics.json`:
 
 ```jsonc
+// ~/.config/opencode/opencode-metrics.json  (or .opencode/opencode-metrics.json)
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    ["opencode-metrics", { "modelMonitor": true }]
-  ]
+  "modelMonitor": true
 }
 ```
+
+Use this file rather than the plugin entry's options. OpenCode `2.0.10` does not
+forward plugin options to the **TUI** role — `context.options` arrives as `{}`
+there — so `["opencode-metrics", { "modelMonitor": true }]` enables the server
+collector while the sidebar rows stay hidden, which looks like the feature is
+broken. Both roles read `opencode-metrics.json`, and a plugin option set to
+`true` still wins where it does arrive.
 
 Set it to `false` or omit it to turn monitoring off. Only boolean `true` enables
 it. Disabled means no model HTTP hooks, model RPC, model polling, or model rows;
@@ -70,14 +72,14 @@ can be restored after re-enabling. This also applies when upgrading from `0.5.0`
 The `rows.model` / `visible.model` preferences only hide enabled model rows;
 they do not opt into collection. Open a fresh TUI to verify configuration changes.
 
-For a local checkout, replace `package` with the absolute `src/` directory.
-When connecting remotely, enable the option on the server that runs the collector.
+When connecting remotely, the file must also exist on the machine that runs the
+collector, since the server role reads its own copy.
 
 First install or upgrade explicitly (existing installs do not follow registry
 updates automatically):
 
 ```sh
-opencode plugin add opencode-metrics@0.7.0
+opencode plugin add opencode-metrics@0.7.1
 ```
 
 If already configured with an unpinned package name, use

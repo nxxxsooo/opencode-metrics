@@ -93,6 +93,8 @@ export interface BarConfig {
   holdDurationMs: number
   estimationRatio: number
   enableLogging: boolean
+  /** File-based fallback for the plugin option; see getConfig. */
+  modelMonitor: boolean
   visible: {
     speed: boolean
     ttft: boolean
@@ -118,6 +120,7 @@ export const DEFAULT_CONFIG: BarConfig = {
   holdDurationMs: 0,
   estimationRatio: 4.0,
   enableLogging: false,
+  modelMonitor: false,
   visible: {
     speed: true,
     ttft: true,

@@ -186,7 +186,7 @@ describe("formatBar", () => {
     m.firstTokenTime = 1100
     m.estimatedOutputTokens = 100
     const config = {
-      refreshIntervalMs: 200, holdDurationMs: 5000, estimationRatio: 4, enableLogging: false,
+      refreshIntervalMs: 200, holdDurationMs: 5000, estimationRatio: 4, enableLogging: false, modelMonitor: false,
       visible: { speed: true, ttft: false, input: false, output: true, cache: false, elapsed: false, session: false, model: false },
     }
     const result = formatBar(m, 2000, config)

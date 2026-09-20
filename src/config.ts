@@ -36,6 +36,12 @@ export function getConfig(): BarConfig {
       if (typeof parsed.enableLogging === "boolean") {
         merged.enableLogging = parsed.enableLogging
       }
+      // OpenCode does not forward plugin options to the TUI role, so the
+      // sidebar can never see `options.modelMonitor`. This file is read by
+      // both roles and keeps the opt-in reachable; the option still wins.
+      if (typeof parsed.modelMonitor === "boolean") {
+        merged.modelMonitor = parsed.modelMonitor
+      }
       if (parsed.visible && typeof parsed.visible === "object") {
         for (const key of Object.keys(merged.visible)) {
           if (typeof (parsed.visible as Record<string, unknown>)[key] === "boolean") {

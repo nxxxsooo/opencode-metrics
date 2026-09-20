@@ -17,7 +17,7 @@ export default Plugin.define({
   id: "opencode-metrics",
   setup(context) {
     const config = getConfig()
-    const modelMonitor = context.options?.modelMonitor === true
+    const modelMonitor = context.options?.modelMonitor === true || config.modelMonitor === true
     const host = createOpenCodeV2Host(context, log)
     const collector = createCollector(host, config, log)
     const modelRpc = modelMonitor ? context.client.rpc(ModelIdentityRpc) : undefined

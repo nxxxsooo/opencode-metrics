@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode-ai/plugin"
 import { createModelParser, modelIdentifier, readRequestModel, type ModelIdentity } from "./model-identity"
 import { ModelIdentityRpc } from "./model-identity-rpc"
+import { getConfig } from "./config"
 import type { ModelEvidence } from "./model-evidence"
 
 export default Plugin.define({
@@ -10,7 +11,7 @@ export default Plugin.define({
   async setup(context) {
     // Opt-in collection, not just a row-visibility preference. When disabled,
     // leave HTTP bodies and saved evidence untouched and expose no model RPC.
-    if (context.options?.modelMonitor !== true) return
+    if (context.options?.modelMonitor !== true && getConfig().modelMonitor !== true) return
     const { createModelEvidence } = await import("./model-evidence")
     const records = new Map<string, ModelEvidence>()
     const requests = new WeakMap<Request, ModelEvidence>()

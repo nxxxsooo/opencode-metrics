@@ -20,29 +20,31 @@
 
 ## 模型证据监控（默认关闭）
 
-从 `0.6.0` 起，模型监控默认关闭，Token 指标照常显示。需要时在 `opencode.jsonc`
-的同一个插件条目中设置 `modelMonitor`。OpenCode 的 `plugin` 数组只接受「包名字符串」
-或「`[包名, 选项]` 二元组」，所以选项写在第二个元素里：
+从 `0.7.1` 起，在 `opencode-metrics.json` 里开启 `modelMonitor`：
 
 ```jsonc
+// ~/.config/opencode/opencode-metrics.json（或 .opencode/opencode-metrics.json）
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    ["opencode-metrics", { "modelMonitor": true }]
-  ]
+  "modelMonitor": true
 }
 ```
+
+请用这个文件，而不是插件条目的选项。OpenCode `2.0.10` 不会把插件选项转发给 **TUI**
+角色（那边拿到的 `context.options` 是 `{}`），所以写成
+`["opencode-metrics", { "modelMonitor": true }]` 只会开启服务端采集，侧边栏的模型行
+依旧不显示，看上去就像功能坏了。两个角色都会读 `opencode-metrics.json`；在选项确实
+送达的场合，`true` 选项仍然优先。
 
 设为 `false` 或省略即关闭，仅布尔值 `true` 会开启。关闭时不注册模型 HTTP 钩子或
 模型 RPC，不轮询、不显示模型字段；普通 Token 指标继续工作。已存证据保留，重新开启
 后可恢复；从 `0.5.0` 升级也遵循默认关闭。`rows.model`／`visible.model` 只负责隐藏已
-开启的模型行，不能替代采集开关。修改后新开 TUI 验证。本地开发时将 `package` 换为
-checkout 的 `src/` 绝对路径；远程连接时，在运行采集入口的服务端开启此选项。
+开启的模型行，不能替代采集开关。修改后新开 TUI 验证。远程连接时，运行采集入口的那台
+机器上也要有这个文件，服务端角色读的是它自己那份。
 
 首次安装或显式升级：
 
 ```sh
-opencode plugin add opencode-metrics@0.7.0
+opencode plugin add opencode-metrics@0.7.1
 ```
 
 已有未锁定版本的条目可用 `opencode plugin update opencode-metrics` 更新。
