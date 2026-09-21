@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { createModelEvidence } from "../src/model-evidence"
 
 describe("OpenLLMetry local model evidence", () => {
@@ -16,6 +19,7 @@ describe("OpenLLMetry local model evidence", () => {
   })
 
   test("default-off server setup never loads the OpenLLMetry SDK", () => {
+    const home = mkdtempSync(join(tmpdir(), "opencode-metrics-home-"))
     const result = Bun.spawnSync([process.execPath, "--eval", `
       import { plugin } from "bun";
       plugin({ name: "block-sdk", setup(build) {
@@ -26,7 +30,11 @@ describe("OpenLLMetry local model evidence", () => {
         await server.setup({ options });
       }
       console.log("disabled-ok");
-    `], { cwd: import.meta.dir + "/..", timeout: 10_000 })
+    `], {
+      cwd: import.meta.dir + "/..", timeout: 10_000,
+      env: { ...process.env, HOME: home },
+    })
+    rmSync(home, { recursive: true, force: true })
     expect(result.exitCode).toBe(0)
     expect(result.stdout.toString().trim()).toBe("disabled-ok")
     expect(result.stderr.toString()).toBe("")

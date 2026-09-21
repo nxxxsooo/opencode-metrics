@@ -79,7 +79,7 @@ First install or upgrade explicitly (existing installs do not follow registry
 updates automatically):
 
 ```sh
-opencode plugin add opencode-metrics@0.7.1
+opencode plugin add opencode-metrics@0.8.0
 ```
 
 If already configured with an unpinned package name, use
@@ -91,9 +91,11 @@ No live configuration is changed by building this repository. To roll back this
 integration, pin `opencode-metrics@0.6.0` in the same `opencode.jsonc` entry.
 
 With monitoring enabled, expanded Metrics shows **Request model**, **Response model**, and **Model
-evidence** for the foreground session's latest primary HTTP request (even in tree
-scope). Long identifiers wrap without truncation. Request model comes from the
-outgoing JSON body, not the configured alias. Response model comes from the local
+evidence** for the foreground session's latest primary request (even in tree
+scope). Long identifiers wrap without truncation. Request model prefers the
+outgoing JSON body — over a WebSocket session's outgoing frame, over the
+configured model ID from the `model.request` hook as the transport-independent
+fallback. Response model comes from the local
 raw JSON/SSE fields `response.model`, `message.model`, or `model`. Missing evidence
 shows `unknown`; unavailable server collection is labeled explicitly. A new step
 keeps the previous reported pair explicitly labeled **Last request/response model**
@@ -102,12 +104,18 @@ storage per session and restored after reload/restart; active memory is bounded 
 256 sessions.
 
 This is **not verified ultimate-upstream identity**: a relay can rewrite or hide
-the returned model. Native WebSocket traffic and unsupported content types are not
-captured. Title/generate/compaction requests are excluded. Only identifiers and a
-timestamp are retained, not credentials, prompts, or response content. Streaming
-JSON parsing retains only keys and model strings, so large echoed instructions do
-not hide model evidence (maximum nesting 128, model ID 512 characters, request
-body 4 MiB). Mock HTTP-hook and sidebar tests cover collection and retention.
+the returned model. OpenCode's Responses WebSocket transport is covered since
+0.8.0: the requested model is seeded from the transport-independent
+`model.request` hook, response evidence is captured by a passive, fail-open
+WebSocket observer on `/responses` sockets, and the evidence line is labeled
+`WS <source>` (attribution correlates the socket with the requesting session's
+baseURL, which concurrent same-provider sessions can blur). Unsupported content
+types are not captured. Title/generate/compaction requests are excluded. Only
+identifiers and a timestamp are retained, not credentials, prompts, or response
+content. Streaming JSON parsing retains only keys and model strings, so large
+echoed instructions do not hide model evidence (maximum nesting 128, model ID
+512 characters, request body 4 MiB). Mock HTTP-hook, WebSocket-observer, and
+sidebar tests cover collection and retention.
 
 For example, if a provider routes a retired alias to a replacement and returns
 the replacement in `model`, the two rows show that difference. If it echoes the
@@ -141,6 +149,7 @@ A global footer-style status line keeps **one** request view. Under `opencode se
 
 | OpenCode line | Status | Evidence |
 |---|---|---|
+| OpenCode V2 (`2.0.11`) | Responses WebSocket model capture confirmed | Real `openai/gpt-6-astra` session over the Responses WebSocket transport persisted `{"requested":"gpt-6-astra","reported":"gpt-6-astra","source":"response.model","transport":"websocket"}` through the passive WS observer; `model.request` seeding and frame scanning covered by tests |
 | OpenCode V2 (`2.0.9`) | Theme compatibility and single-entry local loading confirmed | Fresh TUI renders Metrics and model rows; model RPC works; current and beta theme token names covered by tests |
 | OpenCode V2 (`2.0.3`) | Raw HTTP model capture confirmed | Real Responses request produced distinct requested/reported identifiers through plugin RPC; retention and layout covered by tests |
 | O2 beta (`0.0.0-beta-19192`) | Local loading and live speed confirmed | Global discovery entry importing local source; real TUI stream reached `9.6 t/s live` |

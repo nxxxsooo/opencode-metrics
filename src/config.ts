@@ -5,10 +5,17 @@ import { homedir } from "node:os"
 import type { BarConfig } from "./types"
 import { DEFAULT_CONFIG } from "./types"
 
+// Match POSIX homedir semantics: an explicit HOME wins, so container and test
+// environments can relocate the config without rewriting the user's home.
+function homeDirectory(): string {
+  const envHome = process.env.HOME
+  return typeof envHome === "string" && envHome.length > 0 && !envHome.includes("\0") ? envHome : homedir()
+}
+
 function getConfigPaths(): string[] {
   return [
-    join(homedir(), ".config", "opencode", "opencode-metrics.json"),
-    join(homedir(), ".config", "opencode", "opencode-bar.json"),
+    join(homeDirectory(), ".config", "opencode", "opencode-metrics.json"),
+    join(homeDirectory(), ".config", "opencode", "opencode-bar.json"),
     join(process.cwd(), ".opencode", "opencode-metrics.json"),
     join(process.cwd(), ".opencode", "opencode-bar.json"),
   ]

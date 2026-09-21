@@ -302,7 +302,7 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                             value={() => identity?.reported ?? "unknown"}
                             visible={modelVisible} registerSync={registerRowSync} />
                         <StatRow theme={props.theme} label="Model evidence" dim stacked
-                            value={() => modelUnavailable ? "collector unavailable" : identity?.source ? `${identity.previous ? "previous " : ""}HTTP ${identity.source}` : "not captured"}
+                            value={() => modelUnavailable ? "collector unavailable" : identity?.source ? `${identity.previous ? "previous " : ""}${identity.transport === "websocket" ? "WS" : "HTTP"} ${identity.source}` : "not captured"}
                             visible={modelVisible} registerSync={registerRowSync} />
                     </box>
                 )}

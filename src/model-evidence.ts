@@ -1,7 +1,11 @@
 import { INVALID_SPAN_CONTEXT, trace } from "@opentelemetry/api"
 import { ATTR_GEN_AI_REQUEST_MODEL, ATTR_GEN_AI_RESPONSE_MODEL } from "@opentelemetry/semantic-conventions/incubating"
 import { LLMSpan } from "@traceloop/node-server-sdk"
-import { modelIdentifier, type ModelIdentity } from "./model-identity"
+import { modelIdentifier, type ModelIdentity, type ModelTransport } from "./model-identity"
+
+/** Where a requested-model value came from; higher fidelity wins. */
+export type RequestOrigin = ModelTransport | "configured"
+const originRank: Record<RequestOrigin, number> = { configured: 0, websocket: 1, http: 2 }
 
 /** OpenLLMetry's manual reporting API, backed by a local, model-only attribute sink. */
 export function createModelEvidence(observedAt = Date.now()) {
@@ -21,15 +25,22 @@ export function createModelEvidence(observedAt = Date.now()) {
     return sink
   }
   const reporter = new LLMSpan(sink)
+  let requestOrigin: RequestOrigin | null = null
   return {
     identity,
-    request(model: string | null) {
-      identity.requested = null
-      if (model !== null) reporter.reportRequest({ model, messages: [] })
+    request(model: string | null, origin: RequestOrigin = "http") {
+      const rank = originRank[origin]
+      // A lower-fidelity source never overwrites or clears captured evidence.
+      if (rank < (requestOrigin === null ? -1 : originRank[requestOrigin])) return
+      requestOrigin = origin
+      if (model === null) { identity.requested = null; return }
+      reporter.reportRequest({ model, messages: [] })
     },
-    response(model: string, source: string) {
+    response(model: string, source: string, transport: ModelTransport = "http") {
       reporter.reportResponse({ model })
       identity.source = identity.reported ? source : null
+      // Only WebSocket records carry the marker; HTTP snapshots keep their historical shape.
+      if (identity.reported && transport === "websocket") identity.transport = "websocket"
     },
   }
 }

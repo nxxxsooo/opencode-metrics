@@ -1,11 +1,15 @@
 import { createModelJsonScanner } from "./model-json-scanner"
 
 /** Identifiers reported at the local HTTP boundary, not verified upstream identities. */
+export type ModelTransport = "http" | "websocket"
+
 export interface ModelIdentity {
   requested: string | null
   reported: string | null
   source: string | null
   observedAt: number
+  /** Transport the response evidence was observed on; absent means pre-transport-field HTTP records. */
+  transport?: ModelTransport
   previous?: boolean
 }
 

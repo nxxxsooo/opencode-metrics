@@ -1,13 +1,23 @@
 import { describe, expect, test, afterEach } from "bun:test"
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { homedir, tmpdir } from "node:os"
+import { tmpdir } from "node:os"
 import { getConfig, resetConfig } from "../src/config"
 
 const originalCwd = process.cwd()
+const originalHome = process.env.HOME
+
+// Isolate the HOME-based config paths so developer machines with a live
+// ~/.config/opencode/opencode-metrics.json cannot contaminate assertions.
+function isolateHome(): string {
+  const root = mkdtempSync(join(tmpdir(), "opencode-metrics-home-"))
+  process.env.HOME = root
+  resetConfig()
+  return root
+}
 
 function withProjectConfig(contents: string): string {
-  const root = mkdtempSync(join(tmpdir(), "opencode-metrics-config-"))
+  const root = isolateHome()
   mkdirSync(join(root, ".opencode"), { recursive: true })
   writeFileSync(join(root, ".opencode", "opencode-metrics.json"), contents)
   process.chdir(root)
@@ -17,17 +27,17 @@ function withProjectConfig(contents: string): string {
 
 afterEach(() => {
   process.chdir(originalCwd)
+  if (originalHome === undefined) delete process.env.HOME
+  else process.env.HOME = originalHome
   resetConfig()
 })
 
 describe("modelMonitor file fallback", () => {
-  test.skipIf(existsSync(join(homedir(), ".config", "opencode", "opencode-metrics.json")))(
-    "defaults to disabled without a config file", () => {
-    const root = mkdtempSync(join(tmpdir(), "opencode-metrics-config-"))
+  test("defaults to disabled without a config file", () => {
+    const root = isolateHome()
     process.chdir(root)
     resetConfig()
     expect(getConfig().modelMonitor).toBe(false)
-    rmSync(root, { recursive: true, force: true })
   })
 
   test("reads a boolean true from the project config file", () => {

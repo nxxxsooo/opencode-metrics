@@ -44,7 +44,7 @@
 首次安装或显式升级：
 
 ```sh
-opencode plugin add opencode-metrics@0.7.1
+opencode plugin add opencode-metrics@0.8.0
 ```
 
 已有未锁定版本的条目可用 `opencode plugin update opencode-metrics` 更新。
@@ -56,18 +56,22 @@ TUI 入口；如果之前按两份配置安装，移除 `cli.json` 中重复的 
 回退本次接入时，在同一个 `opencode.jsonc` 条目中锁定 `opencode-metrics@0.6.0` 即可。
 
 开启监控并展开侧栏后可见「Request model」「Response model」「Model evidence」：分别来自实际发出的
-JSON 请求体、本机收到的原始 JSON／SSE 模型字段，以及字段来源。完整内部标识自动换行，
-不截掉后缀。缺失时显示 `unknown`，不会用请求别名兜底；采集入口不可用时单独注明。
+JSON 请求体、本机收到的原始 JSON／SSE 模型字段，以及字段来源；WebSocket 会话下请求模型
+依次回退到外发帧与 `model.request` hook 的配置模型。完整内部标识自动换行，
+不截掉后缀。缺失时显示 `unknown`，采集入口不可用时单独注明。
 新步骤等待响应时保留上一次已采集的模型对，并明确标为「Last request/response model」，
 新响应证据到达后替换；树形统计模式下模型仍只对应当前前台会话。
 
-这不是已验证的最上游身份，中转可以隐藏或改写模型字段。原生 WebSocket 流量及不支持的
+这不是已验证的最上游身份，中转可以隐藏或改写模型字段。OpenCode 的 Responses WebSocket 传输自 0.8.0
+起支持：请求模型由与传输无关的 `model.request` hook 提供兜底，响应证据通过被动、失败即放开的
+WebSocket 观察器在 `/responses` 连接上采集，证据行标注 `WS <来源>`（连接与会话的对应关系基于
+baseURL 关联，同 provider 并发会话时可能标错会话，但模型仍是真实观测值）。不支持的
 内容类型不会采集；标题、压缩和临时生成请求不混入前台记录。只在服务端内存保留最近
 256 个会话的模型标识和时间；最后已采集的模型对按会话保存到插件存储，重启后可恢复，
 不保存密钥、提示词或响应正文。流式 JSON 解析只保留键和模型字符串，大段回显指令不会
 遮住模型证据；最大嵌套 128 层，模型标识 512 字符，请求体最多读取 4 MiB。
 OpenCode V2 `2.0.3` 上已通过真实 Responses 请求验证请求与响应模型分离采集；
-保留／恢复及窄侧栏布局另有自动化测试。原生 WebSocket 采集仍不支持。
+保留／恢复、WebSocket 观察器及窄侧栏布局另有自动化测试。
 
 例如，运营商把退役别名路由到替代模型，并在 `model` 中返回替代模型名，两行就能显示
 这个差异。如果仍返回原别名或不返回该字段，插件无法推断隐藏的后端。

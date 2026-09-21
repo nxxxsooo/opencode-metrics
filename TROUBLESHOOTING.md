@@ -56,7 +56,33 @@ An unavailable `opencode-metrics-model/get` RPC is therefore expected when off.
 Disabling collection retains saved evidence in its existing namespace. Re-enable
 to restore it. A returned replacement model is captured only if the provider or
 relay declares it in a supported HTTP response field; an echoed alias is not
-proof of the backend model. Native WebSocket model evidence remains unsupported.
+proof of the backend model.
+
+## Responses WebSocket sessions since 0.8.0
+
+OpenCode v2 can drive the built-in OpenAI provider (also xAI/Azure Responses)
+over the Responses WebSocket transport. That traffic bypasses the
+`http.request`/`http.response` hooks entirely, so on those sessions the
+requested model is seeded from the transport-independent `model.request` hook
+(configured model ID) and response evidence is captured by a passive WebSocket
+observer: one extra `message` listener per socket whose URL ends in
+`/responses`, plus a bounded scan of outgoing `send` payloads, reusing the
+same incremental JSON scanner. The evidence line is labeled `WS <source>` so
+the transport is honest. Sockets are attributed to sessions by correlating the
+socket URL with the `baseURL` of recent primary `model.request` records; frames
+without an attributable session are ignored, and with concurrent same-provider
+sessions the socket-attribution heuristic can label the wrong session with a
+still-real observed model. The prototype patch is installed only while
+`modelMonitor` is on, never alters traffic, and is restored on dispose. If the
+host stops using `globalThis.WebSocket` for provider traffic, the observer
+quietly observes nothing and HTTP capture is unaffected.
+
+Verified 2026-09-21 against OpenCode `2.0.11` with a real `openai/gpt-6-astra`
+session through the sub2api relay: the standalone server persisted
+`{"requested":"gpt-6-astra","reported":"gpt-6-astra","source":"response.model","transport":"websocket"}`.
+Note the runtime's `WebSocket.prototype` may expose `addEventListener` only as
+an inherited method; the observer resolves registration originals through the
+prototype chain and also supports EventEmitter-style `on`/`once` hosts.
 
 The 0.6.0 pre-release check passed 168 tests, typecheck, build, and package audit.
 A fresh 2.0.9 client with default options rendered token metrics without model
@@ -152,7 +178,8 @@ Recovery anchors are `v0.6.0`, this snapshot, and the model-monitoring sections 
   The streaming field scanner now skips content strings without retaining them.
 - Empty/pending polls must not erase the last reported model pair. Previous pairs
   are explicitly labeled, and the last reported pair is saved per session in
-  plugin storage. Native WebSocket traffic is not captured by HTTP hooks.
+  plugin storage. HTTP hooks cannot see Responses WebSocket traffic; since 0.8.0
+  those sessions are covered by the passive WS observer described above.
 - Check RPC with `POST /api/rpc/opencode-metrics-model/get` at the session's
   location and body `{"input":{"sessionID":"<session-id>"}}`. The raw HTTP RPC
   response wraps the record in `output`; the typed client unwraps it.
