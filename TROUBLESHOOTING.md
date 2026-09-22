@@ -60,6 +60,38 @@ proof of the backend model.
 
 ## Responses WebSocket sessions since 0.8.0
 
+### Multi-project capture fix in 0.8.1 (OpenCode 2.0.12+)
+
+Use OpenCode 2.0.12+ with opencode-metrics 0.8.1+ for native, session-scoped WS
+capture. The collector observes `experimental.ws.send` and
+`experimental.ws.receive`, filters to primary requests, and records the explicit
+session ID. It does not change frames, headers, URLs, or transport selection,
+and does not patch the global WebSocket prototype on supported hosts.
+
+Root cause reproduced on 2026-09-22: 0.8.0's module-level observer guard only
+allows one installation per WebSocket prototype. OpenCode loads separate plugin
+instances per project location, so the second instance has request hooks but no
+WS observer. Restarting the daemon can change which project works without fixing
+the defect. A single-location standalone test cannot establish multi-project
+support. `previous HTTP model` means an old HTTP pair is being retained, not that
+the current request switched to HTTP; `unknown` / `not captured` can also occur
+on a correctly loaded 0.8.0. An absent `transport` field does not identify an old
+plugin version, because HTTP records intentionally omit it.
+
+A real OpenCode 2.0.12 process and a controlled Responses WS provider reproduced
+the failure with two concurrent project locations: the published 0.8.0 package
+captured only the first location; the native-hook fix captured both with
+`source: "response.model"`, `transport: "websocket"`, and `previous: false`.
+Regression tests also cover reused connections, auxiliary/malformed frames,
+byte-preserving HTTP capture, and switching from HTTP to WS within one session.
+
+After `opencode plugin update opencode-metrics`, use `opencode service restart`
+to reload the daemon, then make a new model request. This briefly interrupts
+active sessions. Verify the model RPC at the session's location, not just the
+version in `opencode plugin list`; the sidebar should receive fresh WS evidence.
+
+### Legacy observer on older hosts
+
 OpenCode v2 can drive the built-in OpenAI provider (also xAI/Azure Responses)
 over the Responses WebSocket transport. That traffic bypasses the
 `http.request`/`http.response` hooks entirely, so on those sessions the

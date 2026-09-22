@@ -29,6 +29,24 @@ function basesRelated(a: string, b: string): boolean {
   return a === b || a.startsWith(b + "/") || b.startsWith(a + "/")
 }
 
+// The beta SDK typings predate these hooks. Keep the compatibility boundary
+// narrow until the supported SDK includes the native WS contract.
+interface WebSocketHookEvent {
+  readonly sessionID: string
+  readonly kind: string
+  readonly frame: string
+}
+type Registration = { dispose(): Promise<void> }
+type WebSocketHook = (name: "experimental.ws.send" | "experimental.ws.receive",
+  callback: (event: WebSocketHookEvent) => void) => Promise<Registration>
+
+function hasNativeWebSocketHooks(version: string | undefined): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:$|\+)/.exec(version ?? "")
+  if (!match) return false
+  const [, major, minor, patch] = match.map(Number)
+  return major! > 2 || (major === 2 && (minor! > 0 || patch! >= 12))
+}
+
 export default Plugin.define({
   // Internal server/storage identity within the opencode-metrics package.
   // Keep stable: OpenCode scopes saved model evidence by this ID.
@@ -90,6 +108,35 @@ export default Plugin.define({
       }
       return null
     }
+    function observeFrame(sessionID: string, direction: "in" | "out", text: string): void {
+      if (disposed) return
+      const evidence = records.get(sessionID)
+      if (!evidence) return
+      try {
+        const scanner = createModelJsonScanner((model, source) => {
+          if (disposed || records.get(sessionID) !== evidence) return
+          if (direction === "out") evidence.request(model, "websocket")
+          else commitResponse(sessionID, evidence, model, source, "websocket")
+        })
+        scanner.push(text.slice(0, FRAME_SCAN_LIMIT))
+      } catch { /* Observation must not break generation or rewrite the frame. */ }
+    }
+    const nativeWebSocketHooks: Registration[] = []
+    if (hasNativeWebSocketHooks(context.app?.version)) {
+      try {
+        const hook = context.session.hook.bind(context.session) as unknown as WebSocketHook
+        nativeWebSocketHooks.push(await hook("experimental.ws.send", (event) => {
+          if (event.kind === "primary") observeFrame(event.sessionID, "out", event.frame)
+        }))
+        nativeWebSocketHooks.push(await hook("experimental.ws.receive", (event) => {
+          if (event.kind === "primary") observeFrame(event.sessionID, "in", event.frame)
+        }))
+      } catch {
+        for (const hook of nativeWebSocketHooks.splice(0)) {
+          try { await hook.dispose() } catch { /* Best effort cleanup before legacy fallback. */ }
+        }
+      }
+    }
     // Fires before transport selection for every session request, HTTP or WebSocket.
     const modelRequestHook = await context.session.hook("model.request", async (event) => {
       if (disposed || event.kind !== "primary") return
@@ -97,18 +144,17 @@ export default Plugin.define({
       const configured = modelIdentifier(typeof ref?.id === "string" ? ref.id : null)
       const baseURL = typeof (event as { baseURL?: unknown }).baseURL === "string"
         ? (event as { baseURL?: unknown }).baseURL as string : ""
-      const current = records.get(event.sessionID)
-      if (!current || !httpClaimed.has(current)) {
-        const evidence = createModelEvidence()
-        records.delete(event.sessionID)
-        records.set(event.sessionID, evidence)
-        if (records.size > 256) records.delete(records.keys().next().value!)
-        evidence.request(configured, "configured")
-      } else {
-        current.request(configured, "configured")
+      // Every model call gets a fresh evidence/rank scope, including an HTTP→WS
+      // switch. lastReported retains the previous pair until new evidence arrives.
+      const evidence = createModelEvidence()
+      records.delete(event.sessionID)
+      records.set(event.sessionID, evidence)
+      if (records.size > 256) records.delete(records.keys().next().value!)
+      evidence.request(configured, "configured")
+      if (nativeWebSocketHooks.length === 0) {
+        attributions.push({ sessionID: event.sessionID, baseURL, time: Date.now() })
+        if (attributions.length > ATTRIBUTION_LIMIT) attributions.shift()
       }
-      attributions.push({ sessionID: event.sessionID, baseURL, time: Date.now() })
-      if (attributions.length > ATTRIBUTION_LIMIT) attributions.shift()
     })
     const requestHook = await context.session.hook("http.request", async (event) => {
       if (event.kind !== "primary" || disposed) return
@@ -150,9 +196,9 @@ export default Plugin.define({
         flush() { try { parser.end() } catch { /* Observation only. */ } },
       })), { status: response.status, statusText: response.statusText, headers: response.headers })
     })
-    // Passive observation of Responses WebSocket traffic, which bypasses the
-    // HTTP hooks entirely. Frames without an attributable session are ignored.
-    const observer = installWebSocketModelObserver({
+    // Older hosts lack native WS hooks. Retain the legacy observer for them;
+    // modern hosts use explicit session IDs and never patch the global prototype.
+    const observer = nativeWebSocketHooks.length > 0 ? null : installWebSocketModelObserver({
       isModelSocket: (url) => /^wss?:\/\//i.test(url) && /\/responses\/?(\?.*)?$/i.test(url),
       onFrame: ({ socket, url, direction, text }) => {
         if (disposed) return
@@ -163,15 +209,7 @@ export default Plugin.define({
           socketSessions.set(socket, attributed)
           attributedSession = attributed
         }
-        const sessionID: string = attributedSession
-        const evidence = records.get(sessionID)
-        if (!evidence) return
-        const scanner = createModelJsonScanner((model, source) => {
-          if (disposed || records.get(sessionID) !== evidence) return
-          if (direction === "out") evidence.request(model, "websocket")
-          else commitResponse(sessionID, evidence, model, source, "websocket")
-        })
-        try { scanner.push(text.slice(0, FRAME_SCAN_LIMIT)) } catch { /* Observation only. */ }
+        observeFrame(attributedSession, direction, text)
       },
     })
     return async () => {
@@ -179,6 +217,7 @@ export default Plugin.define({
       records.clear()
       lastReported.clear()
       attributions.length = 0
+      for (const hook of nativeWebSocketHooks) await hook.dispose()
       await responseHook.dispose()
       await requestHook.dispose()
       await modelRequestHook.dispose()

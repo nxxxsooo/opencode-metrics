@@ -44,7 +44,7 @@
 首次安装或显式升级：
 
 ```sh
-opencode plugin add opencode-metrics@0.8.0
+opencode plugin add opencode-metrics@0.8.1
 ```
 
 已有未锁定版本的条目可用 `opencode plugin update opencode-metrics` 更新。
@@ -62,10 +62,15 @@ JSON 请求体、本机收到的原始 JSON／SSE 模型字段，以及字段来
 新步骤等待响应时保留上一次已采集的模型对，并明确标为「Last request/response model」，
 新响应证据到达后替换；树形统计模式下模型仍只对应当前前台会话。
 
+更新插件后，需要运行 `opencode service restart` 重载后台采集器，会短暂中断活动会话；
+仅重启 TUI 不会重载后台插件。
+
 这不是已验证的最上游身份，中转可以隐藏或改写模型字段。OpenCode 的 Responses WebSocket 传输自 0.8.0
-起支持：请求模型由与传输无关的 `model.request` hook 提供兜底，响应证据通过被动、失败即放开的
-WebSocket 观察器在 `/responses` 连接上采集，证据行标注 `WS <来源>`（连接与会话的对应关系基于
-baseURL 关联，同 provider 并发会话时可能标错会话，但模型仍是真实观测值）。不支持的
+起支持；**0.8.1** 在 **OpenCode 2.0.12+** 上使用原生 `experimental.ws.send`／
+`experimental.ws.receive` hook，按明确的会话 ID 采集，支持多项目与同 provider 并发会话隔离。
+仅观察帧，不改写内容；证据行标注 `WS <来源>`，请求模型由 `model.request` hook 提供兜底。
+旧宿主保留 `/responses` 原型观察器，但其全进程安装限制和 baseURL 推测在多项目、同 provider
+并发时不可靠；可靠的 WS 采集需要升级到 OpenCode 2.0.12+。不支持的
 内容类型不会采集；标题、压缩和临时生成请求不混入前台记录。只在服务端内存保留最近
 256 个会话的模型标识和时间；最后已采集的模型对按会话保存到插件存储，重启后可恢复，
 不保存密钥、提示词或响应正文。流式 JSON 解析只保留键和模型字符串，大段回显指令不会
