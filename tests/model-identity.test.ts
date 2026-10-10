@@ -3,7 +3,7 @@ import { LLMSpan } from "@traceloop/node-server-sdk"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createModelParser, modelIdentifier, readRequestModel, reportedModel } from "../src/model-identity"
+import { createModelParser, modelIdentifier, modelMismatch, readRequestModel, reportedModel } from "../src/model-identity"
 import { resetConfig } from "../src/config"
 import server from "../src/server"
 
@@ -380,5 +380,23 @@ describe("server WebSocket observation", () => {
         "observedAt", "previous", "reported", "requested", "source",
       ])
     } finally { await h.cleanup?.() }
+  })
+})
+
+describe("model mismatch detection", () => {
+  test("flags only genuine divergence between requested and reported ids", () => {
+    // Case, surrounding space and a provider/ prefix are not divergence.
+    expect(modelMismatch("deepseek-v4.1-flash", "deepseek-v4.1-flash")).toBe(false)
+    expect(modelMismatch("DeepSeek-V4.1-Flash", "deepseek-v4.1-flash")).toBe(false)
+    expect(modelMismatch(" deepseek-v4.1-flash ", "deepseek-v4.1-flash")).toBe(false)
+    expect(modelMismatch("deepseek-v4.1-flash", "deepseek/deepseek-v4.1-flash")).toBe(false)
+    expect(modelMismatch("openai/gpt-6-astra", "gpt-6-astra")).toBe(false)
+    // A real upstream drift is flagged.
+    expect(modelMismatch("gpt-6-astra", "gpt-6-astra-x")).toBe(true)
+    expect(modelMismatch("DeepSeek-V4.1-Flash", "deepseek-v4-flash-202605")).toBe(true)
+    // Missing evidence is unknown, never a mismatch.
+    expect(modelMismatch(null, "gpt-6-astra")).toBe(false)
+    expect(modelMismatch("gpt-6-astra", null)).toBe(false)
+    expect(modelMismatch(null, null)).toBe(false)
   })
 })

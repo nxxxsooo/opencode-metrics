@@ -44,7 +44,7 @@
 首次安装或显式升级：
 
 ```sh
-opencode plugin add opencode-metrics@0.8.1
+opencode plugin add opencode-metrics@0.9.0
 ```
 
 已有未锁定版本的条目可用 `opencode plugin update opencode-metrics` 更新。
@@ -79,7 +79,9 @@ OpenCode V2 `2.0.3` 上已通过真实 Responses 请求验证请求与响应模�
 保留／恢复、WebSocket 观察器及窄侧栏布局另有自动化测试。
 
 例如，运营商把退役别名路由到替代模型，并在 `model` 中返回替代模型名，两行就能显示
-这个差异。如果仍返回原别名或不返回该字段，插件无法推断隐藏的后端。
+这个差异。当两个标识在忽略大小写和一个 `provider/` 前缀后仍不同时，**Model evidence**
+行会追加警告色的 ` · mismatch`，与 Sub2API 等中转面板的「模型不一致」对齐。如果仍返回
+原别名或不返回该字段，则不显示 mismatch —— 回显的标识并不能证明隐藏的后端。
 
 ### OpenLLMetry 接入（0.7.0）
 

@@ -9,7 +9,7 @@ interface StatRowProps {
     label: string | (() => string)
     value: string | (() => string)
     accent?: boolean
-    warning?: boolean
+    warning?: boolean | (() => boolean)
     success?: boolean
     dim?: boolean
     icon?: string
@@ -24,8 +24,9 @@ export function StatRow(props: StatRowProps) {
     let labelNode: TextRenderable | undefined
     let valueNode: TextRenderable | undefined
     let unregisterSync: (() => void) | undefined
+    const warn = () => typeof props.warning === "function" ? props.warning() : props.warning === true
     const fg = () => {
-        if (props.warning) return props.theme.warning
+        if (warn()) return props.theme.warning
         if (props.success) return props.theme.success ?? props.theme.accent
         if (props.accent) return props.theme.accent
         if (props.dim) return props.theme.textMuted
@@ -42,6 +43,9 @@ export function StatRow(props: StatRowProps) {
         if (labelNode && !labelNode.isDestroyed) labelNode.content = isVisible ? label() : ""
         if (!valueNode || valueNode.isDestroyed) return
         valueNode.content = isVisible ? content() : ""
+        // Re-apply color on sync: a function `warning` (e.g. a derived mismatch
+        // flag) can change without a Solid re-render of the fg prop.
+        valueNode.fg = fg()
         valueNode.requestRender()
     }
     unregisterSync = props.registerSync?.(syncContent)

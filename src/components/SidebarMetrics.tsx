@@ -13,6 +13,7 @@ import {
 import { StatRow } from "./StatRow"
 import type { MetricsSidebarController } from "../tui-preferences"
 import type { ModelIdentity } from "../model-identity"
+import { modelMismatch } from "../model-identity"
 
 interface SidebarMetricsProps {
     sessionID: string
@@ -302,7 +303,13 @@ export function SidebarMetrics(props: SidebarMetricsProps) {
                             value={() => identity?.reported ?? "unknown"}
                             visible={modelVisible} registerSync={registerRowSync} />
                         <StatRow theme={props.theme} label="Model evidence" dim stacked
-                            value={() => modelUnavailable ? "collector unavailable" : identity?.source ? `${identity.previous ? "previous " : ""}${identity.transport === "websocket" ? "WS" : "HTTP"} ${identity.source}` : "not captured"}
+                            warning={() => modelMismatch(identity?.requested ?? null, identity?.reported ?? null)}
+                            value={() => {
+                                if (modelUnavailable) return "collector unavailable"
+                                if (!identity?.source) return "not captured"
+                                const base = `${identity.previous ? "previous " : ""}${identity.transport === "websocket" ? "WS" : "HTTP"} ${identity.source}`
+                                return modelMismatch(identity.requested, identity.reported) ? `${base} · mismatch` : base
+                            }}
                             visible={modelVisible} registerSync={registerRowSync} />
                     </box>
                 )}

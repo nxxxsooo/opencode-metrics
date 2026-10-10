@@ -79,7 +79,7 @@ First install or upgrade explicitly (existing installs do not follow registry
 updates automatically):
 
 ```sh
-opencode plugin add opencode-metrics@0.8.1
+opencode plugin add opencode-metrics@0.9.0
 ```
 
 If already configured with an unpinned package name, use
@@ -124,8 +124,12 @@ echoed instructions do not hide model evidence (maximum nesting 128, model ID
 sidebar tests cover collection and retention.
 
 For example, if a provider routes a retired alias to a replacement and returns
-the replacement in `model`, the two rows show that difference. If it echoes the
-alias or omits the field, the plugin cannot infer the hidden backend.
+the replacement in `model`, the two rows show that difference. When the two
+identifiers differ after normalizing case and a single `provider/` prefix, the
+**Model evidence** line is suffixed with a warning-colored ` · mismatch`,
+mirroring relay dashboards such as Sub2API. If the provider echoes the alias or
+omits the field, no mismatch is shown — an echoed id is not proof of the hidden
+backend.
 
 ### OpenLLMetry integration (0.7.0)
 

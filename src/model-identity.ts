@@ -19,6 +19,24 @@ export function modelIdentifier(value: unknown): string | null {
     && !/[\x00-\x1f\x7f-\x9f]/.test(value) ? value : null
 }
 
+/** Normalize an id for comparison: trim, lowercase, drop one leading `provider/`. */
+function normalizeModelId(value: string): string {
+  const trimmed = value.trim().toLowerCase()
+  const stripped = trimmed.replace(/^[^/]+\//, "")
+  return stripped.length > 0 ? stripped : trimmed
+}
+
+/**
+ * True only when both identifiers are present and differ after normalization.
+ * This compares client-facing id strings; a relay that echoes the requested id
+ * is indistinguishable from a provider genuinely serving it, so equal values
+ * are never proof of the backend model.
+ */
+export function modelMismatch(requested: string | null, reported: string | null): boolean {
+  if (!requested || !reported) return false
+  return normalizeModelId(requested) !== normalizeModelId(reported)
+}
+
 export function reportedModel(value: unknown): { model: string; source: string } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const data = value as Record<string, unknown>

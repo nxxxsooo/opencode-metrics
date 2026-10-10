@@ -131,6 +131,79 @@ describe("SidebarMetrics", () => {
         } finally { setup.renderer.destroy() }
     })
 
+    test("flags a model mismatch in the evidence row only when reported differs", async () => {
+        let listener: MetricsListener | null = null
+        let pair: { requested: string; reported: string; source: string; observedAt: number } | null = null
+        const activeCollector: MetricsCollector = {
+            ...collector,
+            getAggregate: () => ({
+                sessionIDs: ["ses_test"], childSessionCount: 0,
+                inputTokens: 1, outputTokens: 1, cacheReadTokens: 0,
+                cacheReadCompleteness: "unknown", requestStartTime: performance.now(),
+                firstTokenTime: null, completeTime: null, ttft: null,
+                liveTps: null, averageTps: null, previousAverageTps: null,
+                inputIsEstimated: false, outputIsEstimated: false,
+                isStreaming: true, isComplete: false,
+            }),
+            subscribe: (next) => { listener = next; return () => { listener = null } },
+        }
+        const controller: MetricsSidebarController = {
+            prefs: () => DEFAULT_PREFS, collapsed: () => false,
+            toggleCollapsed: () => {}, subscribe: () => () => {},
+        }
+        const theme = createTheme()
+        const setup = await testRender(() => (
+            <SidebarMetrics sessionID="ses_test" collector={activeCollector}
+                refreshIntervalMs={10_000} barConfig={DEFAULT_CONFIG}
+                theme={theme} controller={controller} modelMonitor={true}
+                fetchModelIdentity={async () => pair} />
+        ), { width: 40, height: 24 })
+        try {
+            await setup.flush()
+            // A relay that reports a different id than requested is flagged and warned.
+            pair = { requested: "gpt-6-astra", reported: "gpt-6-astra-x", source: "response.model", observedAt: 1 }
+            listener?.()
+            const frame = await setup.waitForFrame((value) => value.includes("mismatch"))
+            expect(frame).toContain("response.model")
+            const span = setup.captureSpans().lines.flatMap((line) => line.spans)
+                .find((s) => s.text.includes("mismatch"))
+            expect(span?.fg.equals(theme.warning)).toBe(true)
+        } finally { setup.renderer.destroy() }
+    })
+
+    test("does not flag an echoed response model as a mismatch", async () => {
+        let listener: MetricsListener | null = null
+        const activeCollector: MetricsCollector = {
+            ...collector,
+            getAggregate: () => ({
+                sessionIDs: ["ses_test"], childSessionCount: 0,
+                inputTokens: 1, outputTokens: 1, cacheReadTokens: 0,
+                cacheReadCompleteness: "unknown", requestStartTime: performance.now(),
+                firstTokenTime: null, completeTime: null, ttft: null,
+                liveTps: null, averageTps: null, previousAverageTps: null,
+                inputIsEstimated: false, outputIsEstimated: false,
+                isStreaming: true, isComplete: false,
+            }),
+            subscribe: (next) => { listener = next; return () => { listener = null } },
+        }
+        const controller: MetricsSidebarController = {
+            prefs: () => DEFAULT_PREFS, collapsed: () => false,
+            toggleCollapsed: () => {}, subscribe: () => () => {},
+        }
+        const setup = await testRender(() => (
+            <SidebarMetrics sessionID="ses_test" collector={activeCollector}
+                refreshIntervalMs={10_000} barConfig={DEFAULT_CONFIG}
+                theme={createTheme()} controller={controller} modelMonitor={true}
+                fetchModelIdentity={async () => ({ requested: "deepseek-v4.1-flash", reported: "deepseek-v4.1-flash", source: "model", observedAt: 1 })} />
+        ), { width: 40, height: 24 })
+        try {
+            await setup.flush()
+            listener?.()
+            const frame = await setup.waitForFrame((value) => value.includes("HTTP model"))
+            expect(frame).not.toContain("mismatch")
+        } finally { setup.renderer.destroy() }
+    })
+
     test("speed transitions from live to current average to retained average without blanking", () => {
         const base: MetricsAggregate = {
             sessionIDs: ["ses_test"], childSessionCount: 0,
