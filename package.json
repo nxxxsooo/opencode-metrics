@@ -1,6 +1,6 @@
 {
   "name": "opencode-metrics",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "OpenCode O2 CLI sidebar plugin for real-time LLM token metrics",
   "repository": {
     "type": "git",
@@ -82,8 +82,8 @@
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "beta",
-    "@opentui/core": ">=0.5.10 <1",
-    "@opentui/solid": ">=0.5.10 <1",
+    "@opentui/core": "0.5.10",
+    "@opentui/solid": "0.5.10",
     "solid-js": ">=1.9.0 <2"
   }
 }
