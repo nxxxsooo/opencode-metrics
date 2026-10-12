@@ -13,8 +13,8 @@
       "devDependencies": {
         "@opencode-ai/plugin": "beta",
         "@opencode-ai/theme": "^0.0.0-beta-19086",
-        "@opentui/core": "latest",
-        "@opentui/solid": "latest",
+        "@opentui/core": "0.5.10",
+        "@opentui/solid": "0.5.10",
         "@types/bun": "latest",
         "solid-js": "^1.9.12",
         "tsup": "latest",

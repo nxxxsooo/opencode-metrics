@@ -147,6 +147,27 @@ not touch `effect` and is unaffected. Regression procedure: load the built
 `~/.config/opencode/plugins` and confirm no `failed to load plugin` WARN for
 `opencode-metrics-model` in the host log.
 
+## TUI plugin fails: `OPENTUI_FORCE_UNICODE is already registered with different configuration` (0.9.2)
+
+Observed on OpenCode 2.0.27 with 0.9.1 installed from npm: the TUI plugin entry
+failed at load; the server entry kept working.
+
+`@opentui/core` registers env vars into a `globalThis` singleton registry that
+is shared inside one process. OpenCode's CLI/TUI runtime runs OpenTUI itself,
+so the host's embedded copy registers first; the plugin's own `@opentui/core`
+registering a same-named var with a different `description` throws and the
+host marks the plugin failed. OpenCode 2.0.27's embedded table matches
+`@opentui/core@0.5.10` (`OPENTUI_FORCE_UNICODE` description "Force Mode 2026
+Unicode support…"); 0.6.1 changed the description to "Use the Unicode width
+method (mode 2027)…". 0.9.x used `"@opentui/core": "latest"` and shipped no
+lockfile, so a fresh published install could resolve 0.6.1 from npm.
+
+Fix in 0.9.2: pin `@opentui/core` / `@opentui/solid` to the host-matching
+`0.5.10` in devDependencies and ship `bun.lock`. `tests/opentui-pin.test.ts`
+guards the lockfile resolution. This is pinned to the host's embedded version,
+not "compatible-to-host forever": when OpenCode ships a newer embedded
+@opentui, the same class of conflict returns and the pins must follow.
+
 ## Never configure `dist/` as a plugin target
 
 A configured directory is resolved by filename convention, not by `package.json`
