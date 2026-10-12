@@ -79,7 +79,7 @@ First install or upgrade explicitly (existing installs do not follow registry
 updates automatically):
 
 ```sh
-opencode plugin add opencode-metrics@0.9.0
+opencode plugin add opencode-metrics@0.9.1
 ```
 
 If already configured with an unpinned package name, use

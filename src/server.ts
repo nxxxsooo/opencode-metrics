@@ -1,4 +1,10 @@
-import { Plugin } from "@opencode-ai/plugin"
+// Import the identity `define` helper from the schema-free leaf subpath.
+// The `@opencode-ai/plugin` barrel eagerly re-exports every `@opencode-ai/schema/*`
+// module, and those call Effect-Schema checks (e.g. `Schema.isStartsWith`) at module
+// evaluation. Host builds (OpenCode v2) override the bare `effect` specifier with an
+// embedded Effect copy that predates those check names, so any plugin pulling the
+// barrel fails to load with "Schema.isStartsWith is not a function".
+import { define } from "@opencode-ai/plugin/promise/plugin"
 import { createModelJsonScanner } from "./model-json-scanner"
 import { createModelParser, modelIdentifier, readRequestModel, type ModelIdentity, type ModelTransport } from "./model-identity"
 import { ModelIdentityRpc } from "./model-identity-rpc"
@@ -47,7 +53,7 @@ function hasNativeWebSocketHooks(version: string | undefined): boolean {
   return major! > 2 || (major === 2 && (minor! > 0 || patch! >= 12))
 }
 
-export default Plugin.define({
+export default define({
   // Internal server/storage identity within the opencode-metrics package.
   // Keep stable: OpenCode scopes saved model evidence by this ID.
   id: "opencode-metrics-model",

@@ -44,7 +44,7 @@
 首次安装或显式升级：
 
 ```sh
-opencode plugin add opencode-metrics@0.9.0
+opencode plugin add opencode-metrics@0.9.1
 ```
 
 已有未锁定版本的条目可用 `opencode plugin update opencode-metrics` 更新。

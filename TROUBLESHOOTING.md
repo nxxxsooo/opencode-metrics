@@ -123,6 +123,30 @@ returned retained evidence; the default-off location returned `rpc.unavailable`.
 HTTP-hook tests cover a retired request alias with a provider-declared replacement
 and a missing response model that remains unknown.
 
+## Plugin fails to load: `Schema.isStartsWith is not a function` (0.9.1)
+
+Observed on OpenCode 2.0.27 with 0.9.0 installed from npm: every plugin load
+attempt failed with `Die(TypeError: Schema.isStartsWith is not a function …
+'Schema.isStartsWith' is undefined)` and the plugin sidebar showed `failed`.
+
+The host overrides the bare `effect` specifier for all plugin code with its own
+embedded Effect copy, which predates the RC rename `isStartingWith` →
+`isStartsWith`. Meanwhile the `@opencode-ai/plugin` "." barrel eagerly
+re-exports every `@opencode-ai/schema/*` module, several of which call
+`Schema.isStartsWith` at module evaluation. Any plugin importing that barrel
+dies at load time even though it resolves its own npm `effect` copy standalone.
+Verified 2026-10-12: `v2.0.27` binary identifiers contain
+`effect/schema/isStartingWith` but not `isStartsWith`, and an in-host probe
+reported `isStartsWith: undefined, isStartingWith: function`.
+
+Fix in 0.9.1: `src/server.ts` imports the identity `define` helper from the
+schema-free leaf `@opencode-ai/plugin/promise/plugin` instead of the barrel;
+the `Rpc` chain (`@opencode-ai/plugin/rpc` → `@opencode-ai/schema/rpc`) does
+not touch `effect` and is unaffected. Regression procedure: load the built
+`dist/server.js` through the host via a wrapper plugin in
+`~/.config/opencode/plugins` and confirm no `failed to load plugin` WARN for
+`opencode-metrics-model` in the host log.
+
 ## Never configure `dist/` as a plugin target
 
 A configured directory is resolved by filename convention, not by `package.json`
