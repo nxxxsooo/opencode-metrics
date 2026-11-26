@@ -1,4 +1,4 @@
-import type { Context } from "@opencode-ai/plugin/tui/plugin"
+import type { Context } from "@opencode/plugin/tui/plugin"
 import type { MetricsEventApi } from "./event-bus"
 import type { HydrationApi } from "./session-hydration"
 

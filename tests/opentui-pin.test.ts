@@ -10,7 +10,8 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
-const OPENTUI_PINNED_VERSION = "0.5.10"
+const OPENTUI_PINNED_VERSION = "0.9.9"
+const OPENTUI_HOST_PEERS = "0.9.4 || 0.9.9"
 
 describe("published dependency pins", () => {
     const pkg = JSON.parse(readFileSync(resolve(import.meta.dir, "../package.json"), "utf8"))
@@ -25,11 +26,14 @@ describe("published dependency pins", () => {
 
     test("bun.lock resolves @opentui/core to the pinned version", () => {
         const lock = readFileSync(resolve(import.meta.dir, "../bun.lock"), "utf8")
-        expect(lock).toContain(`@opentui/core@${OPENTUI_PINNED_VERSION}`)
-        expect(lock).not.toMatch(/@opentui\/core@(?!0\.5\.10)/)
+        for (const name of ["core", "solid"]) {
+            const versions = Array.from(lock.matchAll(new RegExp(`@opentui/${name}@([^"\\s]+)`, "g")), (match) => match[1])
+            expect([...new Set(versions)]).toEqual([OPENTUI_PINNED_VERSION])
+        }
     })
 
-    test("published tarball ships the lockfile", () => {
-        expect(pkg.files).toContain("bun.lock")
+    test("published peers only allow OpenTUI versions shipped by the targeted hosts", () => {
+        expect(pkg.peerDependencies["@opentui/core"]).toBe(OPENTUI_HOST_PEERS)
+        expect(pkg.peerDependencies["@opentui/solid"]).toBe(OPENTUI_HOST_PEERS)
     })
 })

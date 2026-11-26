@@ -162,11 +162,12 @@ Unicode support…"); 0.6.1 changed the description to "Use the Unicode width
 method (mode 2027)…". 0.9.x used `"@opentui/core": "latest"` and shipped no
 lockfile, so a fresh published install could resolve 0.6.1 from npm.
 
-Fix in 0.9.2: pin `@opentui/core` / `@opentui/solid` to the host-matching
-`0.5.10` in devDependencies and ship `bun.lock`. `tests/opentui-pin.test.ts`
-guards the lockfile resolution. This is pinned to the host's embedded version,
-not "compatible-to-host forever": when OpenCode ships a newer embedded
-@opentui, the same class of conflict returns and the pins must follow.
+Release 0.9.3 pins both OpenTUI peers to 0.5.10 for the older host. Release
+0.9.4 builds with 0.9.9 for OpenCode 2.4.2 and allows only 0.9.4 (bundled
+by 2.4.0 and 2.4.1) or 0.9.9 in the package's OpenTUI peers.
+`tests/opentui-pin.test.ts` guards the development lockfile and the published
+peer constraints. When OpenCode changes its bundled OpenTUI, recheck these
+versions before widening the range.
 
 ## Never configure `dist/` as a plugin target
 

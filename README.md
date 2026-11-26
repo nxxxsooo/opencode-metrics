@@ -28,7 +28,7 @@ First run `opencode debug paths` using the same launcher as your TUI. Use its **
 // ~/.config/opencode/opencode.jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-metrics"]
+  "plugins": ["opencode-metrics"]
 }
 ```
 
@@ -79,7 +79,7 @@ First install or upgrade explicitly (existing installs do not follow registry
 updates automatically):
 
 ```sh
-opencode plugin add opencode-metrics@0.9.1
+opencode plugin add opencode-metrics@0.9.4
 ```
 
 If already configured with an unpinned package name, use
@@ -156,6 +156,9 @@ A global footer-style status line keeps **one** request view. Under `opencode se
 `opencode-metrics` stores requests keyed by `sessionID` and renders the session passed to O2's `sidebar.content` slot.
 
 ## Compatibility
+
+`0.9.4` targets OpenCode 2.4 and is built against OpenCode 2.4.2 with
+OpenTUI 0.9.9. OpenCode 2.4.0 and 2.4.1 ship OpenTUI 0.9.4.
 
 | OpenCode line | Status | Evidence |
 |---|---|---|
@@ -258,7 +261,7 @@ If you are an AI coding agent installing this for a user, the full procedure is:
 GOAL: install opencode-metrics into the user's OpenCode O2 TUI.
 
 1. Run opencode debug paths through the user's actual launcher.
-   Add "opencode-metrics" once to <config>/opencode.jsonc's "plugin" array,
+   Add "opencode-metrics" once to <config>/opencode.jsonc's "plugins" array,
    preserving sibling entries. OpenCode loads the TUI entry automatically.
 2. Remove an older duplicate metrics entry from cli.json, if present.
    Use opencode plugin add/update to install or update the requested version.
@@ -289,7 +292,7 @@ Install dependencies in your checkout with `bun install --frozen-lockfile`. Usin
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["/absolute/path/to/opencode-metrics/src"]
+  "plugins": ["/absolute/path/to/opencode-metrics/src"]
 }
 ```
 
@@ -305,7 +308,7 @@ Checks:
 bun run check
 ```
 
-CI checks against the current OpenCode O2 `beta` plugin contract.
+CI checks against the OpenCode 2.4.2 SDK.
 
 The `./tui` export points at `src/tui.tsx` because OpenCode loads TUI plugin TSX through its Bun preload, matching the established TUI plugin pattern.
 

@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 /** @jsxRuntime automatic */
-import { Plugin } from "@opencode-ai/plugin/tui"
+import { Plugin } from "@opencode/plugin/tui"
 import { createCollector } from "./collector"
 import { createOpenCodeV2Host } from "./opencode-compat"
 import { getConfig } from "./config"

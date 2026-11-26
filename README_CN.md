@@ -44,7 +44,7 @@
 首次安装或显式升级：
 
 ```sh
-opencode plugin add opencode-metrics@0.9.1
+opencode plugin add opencode-metrics@0.9.4
 ```
 
 已有未锁定版本的条目可用 `opencode plugin update opencode-metrics` 更新。
@@ -107,7 +107,7 @@ OpenLLMetry。只有 `modelMonitor: true` 时才在服务端加载 SDK；请求�
 // ~/.config/opencode/opencode.jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-metrics"]
+  "plugins": ["opencode-metrics"]
 }
 ```
 
@@ -139,6 +139,9 @@ OpenCode `2.0.9` 按 TUI 和 Server 分组，即使两个入口使用相同 ID �
 `opencode-metrics` 按 `sessionID` 记录请求，并渲染 O2 传给 `sidebar.content` slot 的会话。
 
 ## 兼容性
+
+`0.9.4` 面向 OpenCode 2.4，构建使用 OpenCode 2.4.2 SDK 和 OpenTUI 0.9.9。
+OpenCode 2.4.0 和 2.4.1 内置的是 OpenTUI 0.9.4。
 
 | OpenCode 版本线 | 状态 | 证据 |
 |---|---|---|
@@ -238,7 +241,7 @@ bun run init:prefs
 目标：把 opencode-metrics 装进用户的 OpenCode O2 TUI。
 
 1. 使用用户实际启动命令运行 opencode debug paths。
-   在 <config>/opencode.jsonc 的 "plugin" 数组加入一次 "opencode-metrics"，
+   在 <config>/opencode.jsonc 的 "plugins" 数组加入一次 "opencode-metrics"，
    保留其他插件条目。OpenCode 会自动加载其 TUI 入口。
 2. 如果 cli.json 中已有重复的 metrics 条目，仅移除该条目。
    用 opencode plugin add/update 安装或更新指定版本，验证消费端可用性；
@@ -268,7 +271,7 @@ bun run init:prefs
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["/absolute/path/to/opencode-metrics/src"]
+  "plugins": ["/absolute/path/to/opencode-metrics/src"]
 }
 ```
 
@@ -284,7 +287,7 @@ bun run init:prefs
 bun run check
 ```
 
-CI 会针对当前 OpenCode O2 `beta` 插件契约执行检查。
+CI 针对 OpenCode 2.4.2 SDK 执行检查。
 
 `./tui` 导出指向 `src/tui.tsx`，因为 OpenCode 会通过 Bun preload 加载 TUI plugin TSX，这符合既有 TUI plugin 模式。
 
